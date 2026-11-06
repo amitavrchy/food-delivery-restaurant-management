@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { useApp } from './provider';
 import { Empty, Loading, Modal } from './ui';
+import { AdvancedNav } from './advanced-nav';
+import { NotificationBell } from './notifications';
 const navigation = [
   {
     href: '/restaurant',
@@ -103,7 +105,12 @@ export function Access({ children, roles }: { children: ReactNode; roles?: strin
     if (ready && !user) router.replace(`/login?next=${encodeURIComponent(path)}`);
   }, [ready, user, router, path]);
   if (!ready || !user) return <Loading />;
-  if (roles && !roles.includes(user.role) && user.role !== 'PLATFORM_ADMIN')
+  if (
+    roles &&
+    !roles.includes(user.role) &&
+    user.role !== 'PLATFORM_ADMIN' &&
+    !user.memberships.some((m) => roles.includes(m.role))
+  )
     return (
       <Empty title="This workspace is for your team">
         <Link className="btn primary" href="/">
@@ -124,6 +131,16 @@ export function RestaurantShell({ children }: { children: ReactNode }) {
   const restaurant =
     user?.memberships.find((m) => m.restaurantId === restaurantId)?.restaurant ||
     restaurants.find((r) => r.id === restaurantId);
+  const membershipRoles =
+    user?.memberships.filter((m) => m.restaurantId === restaurantId).map((m) => m.role) || [];
+  const effectiveRole =
+    user?.role === 'PLATFORM_ADMIN'
+      ? 'PLATFORM_ADMIN'
+      : membershipRoles.includes('RESTAURANT_OWNER')
+        ? 'RESTAURANT_OWNER'
+        : membershipRoles.includes('MANAGER')
+          ? 'MANAGER'
+          : membershipRoles[0] || user?.role || '';
   useEffect(() => {
     if (!socket) return;
     const join = () => socket.emit('join', { room: `restaurant:${restaurantId}:orders` });
@@ -185,7 +202,7 @@ export function RestaurantShell({ children }: { children: ReactNode }) {
           <div className="nav-caption">WORKSPACE</div>
           <nav className="side-nav">
             {navigation
-              .filter((n) => n.roles.includes(user?.role || '') || user?.role === 'PLATFORM_ADMIN')
+              .filter((n) => n.roles.includes(effectiveRole) || effectiveRole === 'PLATFORM_ADMIN')
               .map((n) => (
                 <Link
                   key={n.href}
@@ -199,6 +216,7 @@ export function RestaurantShell({ children }: { children: ReactNode }) {
                 </Link>
               ))}
           </nav>
+          <AdvancedNav role={effectiveRole} onNavigate={() => setMobile(false)} />
           <div className="sidebar-bottom">
             <div className="help-card">
               <span className="help-icon">
@@ -213,6 +231,11 @@ export function RestaurantShell({ children }: { children: ReactNode }) {
             <Link href="/" className="store-link">
               <Store size={18} />
               View storefront
+              <ArrowUpRight size={16} />
+            </Link>
+            <Link href="/account?tab=my%20work" className="store-link">
+              <Clock3 size={18} />
+              My shifts & attendance
               <ArrowUpRight size={16} />
             </Link>
             <button
@@ -247,7 +270,23 @@ export function RestaurantShell({ children }: { children: ReactNode }) {
               </button>
               <span>Workspace</span>
               <span>/</span>
-              <strong>{navigation.find((n) => n.href === path)?.label || 'Overview'}</strong>
+              <strong>
+                {navigation.find((n) => n.href === path)?.label ||
+                  (
+                    {
+                      control: 'Command center',
+                      branches: 'Organizations & branches',
+                      hospitality: 'Hospitality',
+                      procurement: 'Purchasing',
+                      workforce: 'Workforce planning',
+                      marketing: 'Marketing',
+                      insights: 'Business insights',
+                      dispatch: 'Delivery control',
+                      support: 'Guest support',
+                    } as Record<string, string>
+                  )[path.split('/').at(-1) || ''] ||
+                  'Overview'}
+              </strong>
             </div>
             <div className="topbar-actions">
               <form
@@ -270,13 +309,7 @@ export function RestaurantShell({ children }: { children: ReactNode }) {
                 <i />
                 Live workspace
               </span>
-              <button
-                className="icon-btn notification-btn"
-                aria-label="Open activity"
-                onClick={() => setNotifications(true)}
-              >
-                <Bell size={20} />
-              </button>
+              <NotificationBell />
               <span className="avatar small">{user?.name[0]}</span>
             </div>
           </header>
@@ -359,6 +392,9 @@ export function CustomerShell({ children }: { children: ReactNode }) {
           <Link href="/orders" className={path.startsWith('/orders') ? 'selected' : ''}>
             My orders
           </Link>
+          <Link href="/account" className={path === '/account' ? 'selected' : ''}>
+            My account
+          </Link>
           {user && user.role !== 'CUSTOMER' && (
             <Link
               href={
@@ -374,15 +410,16 @@ export function CustomerShell({ children }: { children: ReactNode }) {
           )}
         </nav>
         <div className="customer-actions">
+          <NotificationBell />
           <Link className="cart-button" href="/checkout">
             <ShoppingBag size={20} />
             <span>Cart</span>
             <b>{cart.reduce((s, l) => s + l.qty, 0)}</b>
           </Link>
           {user ? (
-            <button className="avatar" title="Sign out" onClick={() => void logout()}>
+            <Link href="/account" className="avatar" title="Your account">
               {user.name[0]}
-            </button>
+            </Link>
           ) : (
             <Link href="/login" className="btn primary">
               Sign in

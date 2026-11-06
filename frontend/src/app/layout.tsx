@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Provider } from '@/components/provider';
 import 'leaflet/dist/leaflet.css';
 import './globals.css';
+import './advanced.css';
 export const metadata: Metadata = {
   title: { default: 'Tablelane — Good food. Great service.', template: '%s · Tablelane' },
   description:

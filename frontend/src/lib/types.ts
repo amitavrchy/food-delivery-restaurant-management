@@ -6,6 +6,13 @@ export type User = {
   memberships: { restaurantId: string; role: string; restaurant: Restaurant }[];
 };
 export type Restaurant = {
+  organizationId: string | null;
+  taxBps: number;
+  serviceBps: number;
+  minOrderMinor: number;
+  deliveryRadiusKm: number;
+  loyaltyEnabled: boolean;
+  openingHours: Record<string, { open: number; close: number; closed: boolean }>;
   id: string;
   name: string;
   slug: string;
@@ -31,6 +38,10 @@ export type Restaurant = {
 };
 export type Modifier = { id: string; name: string; priceDeltaMinor: number };
 export type MenuItem = {
+  dietaryTags: string[];
+  allergens: string[];
+  energyKcal: number | null;
+  featured: boolean;
   id: string;
   restaurantId: string;
   name: string;
@@ -62,6 +73,17 @@ export type Line = {
   modifiers: Modifier[];
 };
 export type Order = {
+  scheduledFor: string | null;
+  loyaltyRedeemed: number;
+  loyaltyEarned: number;
+  payments: {
+    id: string;
+    provider: string;
+    status: string;
+    amountMinor: number;
+    refunds: { id: string; amountMinor: number; status: string }[];
+  }[];
+  proofs: { id: string; createdAt: string; mimeType: string }[];
   id: string;
   number: number;
   restaurantId: string;
@@ -77,6 +99,7 @@ export type Order = {
   tipMinor: number;
   grandMinor: number;
   deliveryAddress: string | null;
+  deliveryPhone: string | null;
   dropLat: number | null;
   dropLng: number | null;
   notes: string;

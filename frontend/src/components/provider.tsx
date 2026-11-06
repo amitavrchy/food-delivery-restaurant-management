@@ -64,6 +64,11 @@ export function Provider({ children }: { children: ReactNode }) {
     }
   }, [reloadUser]);
   useEffect(() => {
+    void api<Restaurant[]>('restaurants')
+      .then(setRestaurants)
+      .catch(() => {});
+  }, [version]);
+  useEffect(() => {
     if (!user) return;
     const connection = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000', {
       withCredentials: true,
