@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { seedAdvanced } from './advanced-seed';
 import { backfillDemoHistory } from './demo-history';
 import { PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
@@ -344,6 +345,7 @@ async function seed() {
     },
     update: {},
   });
+  await seedAdvanced(db);
   console.log(
     'Demo seeded: 2 restaurants, 20 menu items, 3 riders, 16 tables. Password: use DEMO_PASSWORD from your local environment.',
   );
