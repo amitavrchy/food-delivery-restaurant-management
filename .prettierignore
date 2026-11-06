@@ -1,0 +1,10 @@
+node_modules
+.next
+dist
+package-lock.json
+frontend/public
+backend/prisma/migrations
+artifacts
+test-results
+playwright-report
+Project_spec.md

@@ -1,20 +1,465 @@
 'use client';
-import { useEffect,useRef,useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Banknote, Bike, Check, CircleDollarSign, Clock3, MapPin, Navigation, ShieldCheck, Truck } from 'lucide-react';
-import { Access,CustomerShell } from '@/components/shell';
+import {
+  ArrowRight,
+  Banknote,
+  Bike,
+  Check,
+  CircleDollarSign,
+  Clock3,
+  MapPin,
+  Navigation,
+  ShieldCheck,
+  Truck,
+} from 'lucide-react';
+import { Access, CustomerShell } from '@/components/shell';
 import { useApp } from '@/components/provider';
-import { Badge,Empty,ErrorState,Loading,Metric,Modal,PageHeading } from '@/components/ui';
-import { useAction,useResource } from '@/lib/hooks';
-import { date,money,patch,post,terminal } from '@/lib/api';
+import { Badge, Empty, ErrorState, Loading, Metric, Modal, PageHeading } from '@/components/ui';
+import { useAction, useResource } from '@/lib/hooks';
+import { date, money, patch, post, terminal } from '@/lib/api';
 import type { Order } from '@/lib/types';
-type Rider={userId:string;status:string;lat:number|null;lng:number|null;vehicle:string;verified:boolean;capacity:number;ratingAvg:number;deliveries:number;earningsMinor:number};
-type Offer={id:string;expiresAt:string;order:{id:string;number:number;restaurant:{name:string;address:string;lat:number;lng:number};deliveryFeeMinor:number;tipMinor:number}};
+type Rider = {
+  userId: string;
+  status: string;
+  lat: number | null;
+  lng: number | null;
+  vehicle: string;
+  verified: boolean;
+  capacity: number;
+  ratingAvg: number;
+  deliveries: number;
+  earningsMinor: number;
+};
+type Offer = {
+  id: string;
+  expiresAt: string;
+  order: {
+    id: string;
+    number: number;
+    restaurant: { name: string; address: string; lat: number; lng: number };
+    deliveryFeeMinor: number;
+    tipMinor: number;
+  };
+};
 export default function RiderPage() {
-  const {user,notify}=useApp();const {data:profile,error,loading}=useResource<Rider>(user?.role==='RIDER'?'rider/profile':null);const {data:offers}=useResource<Offer[]>(user?.role==='RIDER'?'rider/offers':null);const {data:orders}=useResource<Order[]>(user?.role==='RIDER'?'orders':null);const {run,busy}=useAction();const [now,setNow]=useState(Date.now()),[otp,setOtp]=useState<Record<string,string>>({}),[emergency,setEmergency]=useState<Order|null>(null),[reason,setReason]=useState(''),[sharing,setSharing]=useState(false);const watch=useRef<number|null>(null);const last=useRef(0);
-  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{clearInterval(timer);if(watch.current!==null)navigator.geolocation.clearWatch(watch.current);};},[]);
-  async function toggle(){if(!profile)return;const status=profile.status==='ONLINE'?'OFFLINE':'ONLINE';await run(()=>post('rider/presence',{status,lat:profile.lat||23.7806,lng:profile.lng||90.4168}),status==='ONLINE'?'You’re online. New delivery offers will appear here.':'You’re offline. Take a little breather.');if(status==='OFFLINE'&&watch.current!==null){navigator.geolocation.clearWatch(watch.current);watch.current=null;setSharing(false);}}
-  function share(){if(!navigator.geolocation){notify('Geolocation is unavailable in this browser.',true);return;}if(watch.current!==null)return;watch.current=navigator.geolocation.watchPosition(p=>{setSharing(true);if(Date.now()-last.current<4500)return;last.current=Date.now();void post('rider/location',{lat:p.coords.latitude,lng:p.coords.longitude}).catch(e=>notify(e.message,true));},()=>{notify('Allow location access in your browser to share your position.',true);setSharing(false);if(watch.current!==null)navigator.geolocation.clearWatch(watch.current);watch.current=null;},{enableHighAccuracy:true,maximumAge:3000,timeout:15000});}
-  const active=(orders||[]).filter(o=>!terminal.includes(o.status));
-  return <CustomerShell><Access roles={['RIDER']}><div className="rider-content"><PageHeading eyebrow="A LITTLE CARE, EVERY MILE" title={`Ready when you are, ${user?.name.split(' ')[0]||'rider'}.`} description="Good food deserves a good journey. Let’s make it happen.">{profile&&<button className={`btn ${profile.status==='ONLINE'?'secondary':'primary'}`} disabled={busy} onClick={()=>void toggle()}><Bike size={18}/>{profile.status==='ONLINE'?'Go offline':'Go online'}</button>}</PageHeading>{loading&&!profile?<Loading/>:error?<ErrorState message={error}/>:profile&&<><div className="rider-banner"><div><h2>{profile.status==='ONLINE'?'You’re on the map.':'A little break looks good on you.'}</h2><p className="muted">{profile.status==='ONLINE'?`${active.length} of ${profile.capacity} deliveries active · ${profile.vehicle}`:'Go online when you’re ready for your next delivery.'}</p></div><Badge value={profile.status}/></div><div className="metrics" style={{gridTemplateColumns:'repeat(3,minmax(0,1fr))'}}><Metric label="Delivery earnings" value={money(profile.earningsMinor)} detail="Delivery fees + 100% of tips" icon={<CircleDollarSign size={18}/>}/><Metric label="Completed trips" value={profile.deliveries} detail="Good meals safely delivered" icon={<Truck size={18}/>}/><Metric label="Rider rating" value={profile.ratingAvg.toFixed(1)} detail={profile.verified?'Documents verified':'Awaiting verification'} icon={<ShieldCheck size={18}/>}/></div>{profile.status==='ONLINE'&&<div className="note-box" style={{display:'flex',gap:15,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}><div><strong>{sharing?'Your location is sharing live':'Make your location count'}</strong><p>{sharing?'Position updates are throttled and shared only with your active deliveries.':'Dispatch uses your last saved position. Share your current location for accurate offers.'}</p></div><button className="btn secondary" disabled={sharing} onClick={share}><Navigation size={17}/>{sharing?'Sharing location':'Share my location'}</button></div>}<h2 className="section-gap" style={{marginBottom:18}}>A fresh delivery opportunity</h2>{offers?.filter(o=>new Date(o.expiresAt).getTime()>now).length?<div className="order-grid">{offers.filter(o=>new Date(o.expiresAt).getTime()>now).map(offer=><article className="panel offer-card" key={offer.id}><div className="summary-row"><h3>Order #{offer.order.number}</h3><span className="badge pending"><Clock3 size={14}/>{Math.max(0,Math.ceil((new Date(offer.expiresAt).getTime()-now)/1000))}s left</span></div><div className="route-location"><span className="store-avatar"><MapPin size={22}/></span><div><strong>{offer.order.restaurant.name}</strong><p>{offer.order.restaurant.address}</p></div></div><div className="offer-bottom"><strong>{money(offer.order.deliveryFeeMinor+offer.order.tipMinor)}</strong><div><button className="btn secondary" disabled={busy} onClick={()=>void run(()=>post(`rider/offers/${offer.id}/reject`),'Offer declined.')}>Pass</button><button className="btn primary" disabled={busy} onClick={()=>void run(()=>post(`rider/offers/${offer.id}/accept`),'Delivery accepted. Let’s get going.')}>Accept<ArrowRight size={16}/></button></div></div></article>)}</div>:<div className="panel"><Empty title={profile.status==='ONLINE'?'A quiet moment between good deliveries':'Your next delivery is a click away'}>{profile.status==='ONLINE'?'Nearby kitchen offers appear here when an order is ready.':'Go online to receive offers from nearby restaurants.'}</Empty></div>}<h2 className="section-gap" style={{marginBottom:18}}>Meals in your care</h2>{active.length?<div className="order-grid">{active.map(o=>{const next=({ASSIGNING_RIDER:'PICKED_UP',PICKED_UP:'ARRIVING',ARRIVING:'DELIVERED'} as Record<string,string>)[o.status];return <article className="panel panel-body" key={o.id}><div className="summary-row"><h3>#{o.number} · {o.restaurant.name}</h3><Badge value={o.status}/></div><div className="info-pair"><span>Pickup</span><strong>{o.restaurant.address}</strong></div><div className="info-pair"><span>Drop-off</span><strong>{o.deliveryAddress}</strong></div><div className="info-pair"><span>Collect from customer</span><strong>{money(o.grandMinor)}</strong></div><a target="_blank" rel="noreferrer" className="text-link section-gap" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.status==='ASSIGNING_RIDER'?o.restaurant.address:o.deliveryAddress||'Dhaka')}`}><Navigation size={17}/>Navigate to {o.status==='ASSIGNING_RIDER'?'restaurant':'customer'}</a>{o.status==='ARRIVING'&&<label className="section-gap">Customer delivery code<input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="6-digit code" value={otp[o.id]||''} onChange={e=>setOtp(v=>({...v,[o.id]:e.target.value}))}/></label>}<div className="form-actions" style={{flexWrap:'wrap'}}><button className="btn danger" onClick={()=>{setEmergency(o);setReason('');}}>Need reassignment</button><button className="btn primary" disabled={busy||!next||(o.status==='ARRIVING'&&!/^\d{6}$/.test(otp[o.id]||''))} onClick={()=>void run(()=>patch(`orders/${o.id}/status`,{status:next,otp:next==='DELIVERED'?otp[o.id]:undefined}),next==='DELIVERED'?'Delivered with care. Thank you!':'Delivery updated.')}>{o.status==='ASSIGNING_RIDER'?'Picked up':o.status==='PICKED_UP'?'I’m arriving':'Confirm delivery'}<Check size={16}/></button></div></article>;})}</div>:<div className="panel"><Empty title="Nothing in your bag just now">Accepted deliveries will appear here.</Empty></div>}<h2 className="section-gap" style={{marginBottom:18}}>A few well-made journeys</h2><section className="panel table-scroll"><table className="data-table"><thead><tr><th>Delivery</th><th>Restaurant</th><th>Date</th><th>Earned</th></tr></thead><tbody>{orders?.filter(o=>o.status==='DELIVERED').slice(0,10).map(o=><tr key={o.id}><td>#{o.number}</td><td>{o.restaurant.name}</td><td>{date(o.placedAt)}</td><td><strong>{money(o.deliveryFeeMinor+o.tipMinor)}</strong></td></tr>)}</tbody></table></section></>}{emergency&&<Modal title="Let’s find a safe handover." onClose={()=>setEmergency(null)}><form className="form-stack" onSubmit={async e=>{e.preventDefault();const result=await run(()=>post(`rider/orders/${emergency.id}/emergency`,{reason}),'Restaurant and customer notified. Reassignment started.');if(result)setEmergency(null);}}><p className="muted">The restaurant and customer will be notified. Coordinate with the restaurant for a safe food handover.</p><label>What happened?<textarea minLength={5} maxLength={300} required value={reason} onChange={e=>setReason(e.target.value)}/></label><div className="form-actions"><button type="button" className="btn secondary" onClick={()=>setEmergency(null)}>Keep delivery</button><button className="btn danger" disabled={busy}>Request reassignment</button></div></form></Modal>}</div></Access></CustomerShell>;
+  const { user, notify } = useApp();
+  const {
+    data: profile,
+    error,
+    loading,
+  } = useResource<Rider>(user?.role === 'RIDER' ? 'rider/profile' : null);
+  const { data: offers } = useResource<Offer[]>(user?.role === 'RIDER' ? 'rider/offers' : null);
+  const { data: orders } = useResource<Order[]>(user?.role === 'RIDER' ? 'orders' : null);
+  const { run, busy } = useAction();
+  const [now, setNow] = useState(Date.now()),
+    [otp, setOtp] = useState<Record<string, string>>({}),
+    [emergency, setEmergency] = useState<Order | null>(null),
+    [reason, setReason] = useState(''),
+    [sharing, setSharing] = useState(false);
+  const watch = useRef<number | null>(null);
+  const last = useRef(0);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearInterval(timer);
+      if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
+    };
+  }, []);
+  async function toggle() {
+    if (!profile) return;
+    const status = profile.status === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
+    await run(
+      () =>
+        post('rider/presence', {
+          status,
+          lat: profile.lat || 23.7806,
+          lng: profile.lng || 90.4168,
+        }),
+      status === 'ONLINE'
+        ? 'You’re online. New delivery offers will appear here.'
+        : 'You’re offline. Take a little breather.',
+    );
+    if (status === 'OFFLINE' && watch.current !== null) {
+      navigator.geolocation.clearWatch(watch.current);
+      watch.current = null;
+      setSharing(false);
+    }
+  }
+  function share() {
+    if (!navigator.geolocation) {
+      notify('Geolocation is unavailable in this browser.', true);
+      return;
+    }
+    if (watch.current !== null) return;
+    watch.current = navigator.geolocation.watchPosition(
+      (p) => {
+        setSharing(true);
+        if (Date.now() - last.current < 4500) return;
+        last.current = Date.now();
+        void post('rider/location', { lat: p.coords.latitude, lng: p.coords.longitude }).catch(
+          (e) => notify(e.message, true),
+        );
+      },
+      () => {
+        notify('Allow location access in your browser to share your position.', true);
+        setSharing(false);
+        if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
+        watch.current = null;
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
+    );
+  }
+  const active = (orders || []).filter((o) => !terminal.includes(o.status));
+  return (
+    <CustomerShell>
+      <Access roles={['RIDER']}>
+        <div className="rider-content">
+          <PageHeading
+            eyebrow="A LITTLE CARE, EVERY MILE"
+            title={`Ready when you are, ${user?.name.split(' ')[0] || 'rider'}.`}
+            description="Good food deserves a good journey. Let’s make it happen."
+          >
+            {profile && (
+              <button
+                className={`btn ${profile.status === 'ONLINE' ? 'secondary' : 'primary'}`}
+                disabled={busy}
+                onClick={() => void toggle()}
+              >
+                <Bike size={18} />
+                {profile.status === 'ONLINE' ? 'Go offline' : 'Go online'}
+              </button>
+            )}
+          </PageHeading>
+          {loading && !profile ? (
+            <Loading />
+          ) : error ? (
+            <ErrorState message={error} />
+          ) : (
+            profile && (
+              <>
+                <div className="rider-banner">
+                  <div>
+                    <h2>
+                      {profile.status === 'ONLINE'
+                        ? 'You’re on the map.'
+                        : 'A little break looks good on you.'}
+                    </h2>
+                    <p className="muted">
+                      {profile.status === 'ONLINE'
+                        ? `${active.length} of ${profile.capacity} deliveries active · ${profile.vehicle}`
+                        : 'Go online when you’re ready for your next delivery.'}
+                    </p>
+                  </div>
+                  <Badge value={profile.status} />
+                </div>
+                <div className="metrics" style={{ gridTemplateColumns: 'repeat(3,minmax(0,1fr))' }}>
+                  <Metric
+                    label="Delivery earnings"
+                    value={money(profile.earningsMinor)}
+                    detail="Delivery fees + 100% of tips"
+                    icon={<CircleDollarSign size={18} />}
+                  />
+                  <Metric
+                    label="Completed trips"
+                    value={profile.deliveries}
+                    detail="Good meals safely delivered"
+                    icon={<Truck size={18} />}
+                  />
+                  <Metric
+                    label="Rider rating"
+                    value={profile.ratingAvg.toFixed(1)}
+                    detail={profile.verified ? 'Documents verified' : 'Awaiting verification'}
+                    icon={<ShieldCheck size={18} />}
+                  />
+                </div>
+                {profile.status === 'ONLINE' && (
+                  <div
+                    className="note-box"
+                    style={{
+                      display: 'flex',
+                      gap: 15,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <strong>
+                        {sharing ? 'Your location is sharing live' : 'Make your location count'}
+                      </strong>
+                      <p>
+                        {sharing
+                          ? 'Position updates are throttled and shared only with your active deliveries.'
+                          : 'Dispatch uses your last saved position. Share your current location for accurate offers.'}
+                      </p>
+                    </div>
+                    <button className="btn secondary" disabled={sharing} onClick={share}>
+                      <Navigation size={17} />
+                      {sharing ? 'Sharing location' : 'Share my location'}
+                    </button>
+                  </div>
+                )}
+                <h2 className="section-gap" style={{ marginBottom: 18 }}>
+                  A fresh delivery opportunity
+                </h2>
+                {offers?.filter((o) => new Date(o.expiresAt).getTime() > now).length ? (
+                  <div className="order-grid">
+                    {offers
+                      .filter((o) => new Date(o.expiresAt).getTime() > now)
+                      .map((offer) => (
+                        <article className="panel offer-card" key={offer.id}>
+                          <div className="summary-row">
+                            <h3>Order #{offer.order.number}</h3>
+                            <span className="badge pending">
+                              <Clock3 size={14} />
+                              {Math.max(
+                                0,
+                                Math.ceil((new Date(offer.expiresAt).getTime() - now) / 1000),
+                              )}
+                              s left
+                            </span>
+                          </div>
+                          <div className="route-location">
+                            <span className="store-avatar">
+                              <MapPin size={22} />
+                            </span>
+                            <div>
+                              <strong>{offer.order.restaurant.name}</strong>
+                              <p>{offer.order.restaurant.address}</p>
+                            </div>
+                          </div>
+                          <div className="offer-bottom">
+                            <strong>
+                              {money(offer.order.deliveryFeeMinor + offer.order.tipMinor)}
+                            </strong>
+                            <div>
+                              <button
+                                className="btn secondary"
+                                disabled={busy}
+                                onClick={() =>
+                                  void run(
+                                    () => post(`rider/offers/${offer.id}/reject`),
+                                    'Offer declined.',
+                                  )
+                                }
+                              >
+                                Pass
+                              </button>
+                              <button
+                                className="btn primary"
+                                disabled={busy}
+                                onClick={() =>
+                                  void run(
+                                    () => post(`rider/offers/${offer.id}/accept`),
+                                    'Delivery accepted. Let’s get going.',
+                                  )
+                                }
+                              >
+                                Accept
+                                <ArrowRight size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="panel">
+                    <Empty
+                      title={
+                        profile.status === 'ONLINE'
+                          ? 'A quiet moment between good deliveries'
+                          : 'Your next delivery is a click away'
+                      }
+                    >
+                      {profile.status === 'ONLINE'
+                        ? 'Nearby kitchen offers appear here when an order is ready.'
+                        : 'Go online to receive offers from nearby restaurants.'}
+                    </Empty>
+                  </div>
+                )}
+                <h2 className="section-gap" style={{ marginBottom: 18 }}>
+                  Meals in your care
+                </h2>
+                {active.length ? (
+                  <div className="order-grid">
+                    {active.map((o) => {
+                      const next = (
+                        {
+                          ASSIGNING_RIDER: 'PICKED_UP',
+                          PICKED_UP: 'ARRIVING',
+                          ARRIVING: 'DELIVERED',
+                        } as Record<string, string>
+                      )[o.status];
+                      return (
+                        <article className="panel panel-body" key={o.id}>
+                          <div className="summary-row">
+                            <h3>
+                              #{o.number} · {o.restaurant.name}
+                            </h3>
+                            <Badge value={o.status} />
+                          </div>
+                          <div className="info-pair">
+                            <span>Pickup</span>
+                            <strong>{o.restaurant.address}</strong>
+                          </div>
+                          <div className="info-pair">
+                            <span>Drop-off</span>
+                            <strong>{o.deliveryAddress}</strong>
+                          </div>
+                          <div className="info-pair">
+                            <span>Collect from customer</span>
+                            <strong>{money(o.grandMinor)}</strong>
+                          </div>
+                          <a
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-link section-gap"
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.status === 'ASSIGNING_RIDER' ? o.restaurant.address : o.deliveryAddress || 'Dhaka')}`}
+                          >
+                            <Navigation size={17} />
+                            Navigate to {o.status === 'ASSIGNING_RIDER' ? 'restaurant' : 'customer'}
+                          </a>
+                          {o.status === 'ARRIVING' && (
+                            <label className="section-gap">
+                              Customer delivery code
+                              <input
+                                inputMode="numeric"
+                                pattern="[0-9]{6}"
+                                maxLength={6}
+                                placeholder="6-digit code"
+                                value={otp[o.id] || ''}
+                                onChange={(e) => setOtp((v) => ({ ...v, [o.id]: e.target.value }))}
+                              />
+                            </label>
+                          )}
+                          <div className="form-actions" style={{ flexWrap: 'wrap' }}>
+                            <button
+                              className="btn danger"
+                              onClick={() => {
+                                setEmergency(o);
+                                setReason('');
+                              }}
+                            >
+                              Need reassignment
+                            </button>
+                            <button
+                              className="btn primary"
+                              disabled={
+                                busy ||
+                                !next ||
+                                (o.status === 'ARRIVING' && !/^\d{6}$/.test(otp[o.id] || ''))
+                              }
+                              onClick={() =>
+                                void run(
+                                  () =>
+                                    patch(`orders/${o.id}/status`, {
+                                      status: next,
+                                      otp: next === 'DELIVERED' ? otp[o.id] : undefined,
+                                    }),
+                                  next === 'DELIVERED'
+                                    ? 'Delivered with care. Thank you!'
+                                    : 'Delivery updated.',
+                                )
+                              }
+                            >
+                              {o.status === 'ASSIGNING_RIDER'
+                                ? 'Picked up'
+                                : o.status === 'PICKED_UP'
+                                  ? 'I’m arriving'
+                                  : 'Confirm delivery'}
+                              <Check size={16} />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="panel">
+                    <Empty title="Nothing in your bag just now">
+                      Accepted deliveries will appear here.
+                    </Empty>
+                  </div>
+                )}
+                <h2 className="section-gap" style={{ marginBottom: 18 }}>
+                  A few well-made journeys
+                </h2>
+                <section className="panel table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Delivery</th>
+                        <th>Restaurant</th>
+                        <th>Date</th>
+                        <th>Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders
+                        ?.filter((o) => o.status === 'DELIVERED')
+                        .slice(0, 10)
+                        .map((o) => (
+                          <tr key={o.id}>
+                            <td>#{o.number}</td>
+                            <td>{o.restaurant.name}</td>
+                            <td>{date(o.placedAt)}</td>
+                            <td>
+                              <strong>{money(o.deliveryFeeMinor + o.tipMinor)}</strong>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </section>
+              </>
+            )
+          )}
+          {emergency && (
+            <Modal title="Let’s find a safe handover." onClose={() => setEmergency(null)}>
+              <form
+                className="form-stack"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const result = await run(
+                    () => post(`rider/orders/${emergency.id}/emergency`, { reason }),
+                    'Restaurant and customer notified. Reassignment started.',
+                  );
+                  if (result) setEmergency(null);
+                }}
+              >
+                <p className="muted">
+                  The restaurant and customer will be notified. Coordinate with the restaurant for a
+                  safe food handover.
+                </p>
+                <label>
+                  What happened?
+                  <textarea
+                    minLength={5}
+                    maxLength={300}
+                    required
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </label>
+                <div className="form-actions">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => setEmergency(null)}
+                  >
+                    Keep delivery
+                  </button>
+                  <button className="btn danger" disabled={busy}>
+                    Request reassignment
+                  </button>
+                </div>
+              </form>
+            </Modal>
+          )}
+        </div>
+      </Access>
+    </CustomerShell>
+  );
 }

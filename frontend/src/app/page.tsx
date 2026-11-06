@@ -8,9 +8,176 @@ import { Empty, ErrorState, Loading } from '@/components/ui';
 import { money } from '@/lib/api';
 import type { Restaurant } from '@/lib/types';
 export default function Discover() {
-  const [query,setQuery]=useState(''),[cuisine,setCuisine]=useState('All restaurants'),[sort,setSort]=useState('Recommended'),[position,setPosition]=useState<{lat:number;lng:number}|null>(null),[locationError,setLocationError]=useState('');
-  const {data,error,loading}=useResource<Restaurant[]>(`restaurants${position?`?lat=${position.lat}&lng=${position.lng}`:''}`);
-  const restaurants=(data||[]).filter(r=>(r.name+' '+r.cuisine).toLowerCase().includes(query.toLowerCase())&&(cuisine==='All restaurants'||r.cuisine===cuisine)).sort((a,b)=>sort==='Fastest delivery'?(a.eta||0)-(b.eta||0):sort==='Top rated'?(b.rating||0)-(a.rating||0):0);
-  function locate() {if(!navigator.geolocation){setLocationError('Location is unavailable in this browser.');return;}navigator.geolocation.getCurrentPosition(p=>{setPosition({lat:p.coords.latitude,lng:p.coords.longitude});setLocationError('');},()=>setLocationError('Location permission was unavailable. Showing Gulshan, Dhaka.'));}
-  return <CustomerShell><section className="discover-hero"><div className="discover-copy"><div className="eyebrow">FRESH FINDS. FAMILIAR FAVOURITES.</div><h1>A little good food.<br/>A whole <em>better day.</em></h1><p>Your neighbourhood’s best kitchens, delivered with a little extra care.</p><a className="btn primary" href="#restaurants">Find your next favourite <ArrowRight size={18}/></a><button className="text-link" style={{display:'flex',marginTop:20}} onClick={locate}><MapPin size={17}/>{position?'Using your current location':'Delivering around Gulshan, Dhaka'} <span className="muted">· Change</span></button>{locationError&&<p role="status" className="form-hint">{locationError}</p>}</div><div className="discover-visual"><img src="/food/bowl.jpg" alt="A colourful bowl of fresh vegetables and nourishing greens" fetchPriority="high"/><div className="hero-tag"><span className="store-avatar"><Leaf size={25}/></span><div><strong>Fresh, thoughtfully made.</strong><small>Good ingredients. Happy people.</small></div></div></div></section><section id="restaurants"><div className="discovery-toolbar"><div><div className="eyebrow">YOUR NEIGHBOURHOOD, SERVED</div><h2>Something delicious is nearby.</h2><p>Independent kitchens. Real flavours. Pick your favourite.</p></div><div className="search-field"><Search size={18}/><input aria-label="Search restaurants" placeholder="Find a restaurant or cuisine" value={query} onChange={e=>setQuery(e.target.value)}/></div></div><div className="toolbar"><div className="tabs">{['All restaurants','Contemporary','Asian fusion'].map(c=><button key={c} className={cuisine===c?'active':''} onClick={()=>setCuisine(c)}>{c}</button>)}</div><select aria-label="Sort restaurants" value={sort} onChange={e=>setSort(e.target.value)} style={{width:180}}>{['Recommended','Fastest delivery','Top rated'].map(s=><option key={s}>{s}</option>)}</select></div>{loading&&!data?<Loading/>:error?<ErrorState message={error}/>:restaurants.length?<div className="restaurant-grid">{restaurants.map(r=><Link className="restaurant-card" href={`/restaurants/${r.id}`} key={r.id}><div className="restaurant-cover"><img loading="lazy" src={r.image} alt={`${r.name} food`}/><span className="image-badge">{r.isOnline?'Made fresh to order':'Delivery paused'}</span></div><div className="restaurant-card-content"><div className="restaurant-title"><h3>{r.name}</h3><span className="restaurant-rating"><Star size={16} fill="currentColor"/>{r.rating?r.rating.toFixed(1):'New'} {r.reviews?`(${r.reviews})`:''}</span></div><p>{r.cuisine} · {r.description}</p><div className="restaurant-meta"><span><Clock3 size={17}/>{r.eta}–{(r.eta||25)+10} min</span><span><Truck size={17}/>{money(r.deliveryFeeMinor)} delivery</span><span><MapPin size={17}/>{r.distance} km</span><ArrowRight size={18} style={{marginLeft:'auto'}}/></div></div></Link>)}</div>:<Empty title="No kitchens found">Try another restaurant name or cuisine.</Empty>}</section><div className="note-box section-gap" style={{display:'flex',alignItems:'center',gap:12}}><ShieldCheck size={23}/><span>Thoughtful kitchens, carefully prepared food, and updates at every step.</span></div></CustomerShell>;
+  const [query, setQuery] = useState(''),
+    [cuisine, setCuisine] = useState('All restaurants'),
+    [sort, setSort] = useState('Recommended'),
+    [position, setPosition] = useState<{ lat: number; lng: number } | null>(null),
+    [locationError, setLocationError] = useState('');
+  const { data, error, loading } = useResource<Restaurant[]>(
+    `restaurants${position ? `?lat=${position.lat}&lng=${position.lng}` : ''}`,
+  );
+  const restaurants = (data || [])
+    .filter(
+      (r) =>
+        (r.name + ' ' + r.cuisine).toLowerCase().includes(query.toLowerCase()) &&
+        (cuisine === 'All restaurants' || r.cuisine === cuisine),
+    )
+    .sort((a, b) =>
+      sort === 'Fastest delivery'
+        ? (a.eta || 0) - (b.eta || 0)
+        : sort === 'Top rated'
+          ? (b.rating || 0) - (a.rating || 0)
+          : 0,
+    );
+  function locate() {
+    if (!navigator.geolocation) {
+      setLocationError('Location is unavailable in this browser.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setPosition({ lat: p.coords.latitude, lng: p.coords.longitude });
+        setLocationError('');
+      },
+      () => setLocationError('Location permission was unavailable. Showing Gulshan, Dhaka.'),
+    );
+  }
+  return (
+    <CustomerShell>
+      <section className="discover-hero">
+        <div className="discover-copy">
+          <div className="eyebrow">FRESH FINDS. FAMILIAR FAVOURITES.</div>
+          <h1>
+            A little good food.
+            <br />A whole <em>better day.</em>
+          </h1>
+          <p>Your neighbourhood’s best kitchens, delivered with a little extra care.</p>
+          <a className="btn primary" href="#restaurants">
+            Find your next favourite <ArrowRight size={18} />
+          </a>
+          <button className="text-link" style={{ display: 'flex', marginTop: 20 }} onClick={locate}>
+            <MapPin size={17} />
+            {position ? 'Using your current location' : 'Delivering around Gulshan, Dhaka'}{' '}
+            <span className="muted">· Change</span>
+          </button>
+          {locationError && (
+            <p role="status" className="form-hint">
+              {locationError}
+            </p>
+          )}
+        </div>
+        <div className="discover-visual">
+          <img
+            src="/food/bowl.jpg"
+            alt="A colourful bowl of fresh vegetables and nourishing greens"
+            fetchPriority="high"
+          />
+          <div className="hero-tag">
+            <span className="store-avatar">
+              <Leaf size={25} />
+            </span>
+            <div>
+              <strong>Fresh, thoughtfully made.</strong>
+              <small>Good ingredients. Happy people.</small>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="restaurants">
+        <div className="discovery-toolbar">
+          <div>
+            <div className="eyebrow">YOUR NEIGHBOURHOOD, SERVED</div>
+            <h2>Something delicious is nearby.</h2>
+            <p>Independent kitchens. Real flavours. Pick your favourite.</p>
+          </div>
+          <div className="search-field">
+            <Search size={18} />
+            <input
+              aria-label="Search restaurants"
+              placeholder="Find a restaurant or cuisine"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="toolbar">
+          <div className="tabs">
+            {['All restaurants', 'Contemporary', 'Asian fusion'].map((c) => (
+              <button
+                key={c}
+                className={cuisine === c ? 'active' : ''}
+                onClick={() => setCuisine(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <select
+            aria-label="Sort restaurants"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            style={{ width: 180 }}
+          >
+            {['Recommended', 'Fastest delivery', 'Top rated'].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+        {loading && !data ? (
+          <Loading />
+        ) : error ? (
+          <ErrorState message={error} />
+        ) : restaurants.length ? (
+          <div className="restaurant-grid">
+            {restaurants.map((r) => (
+              <Link className="restaurant-card" href={`/restaurants/${r.id}`} key={r.id}>
+                <div className="restaurant-cover">
+                  <img loading="lazy" src={r.image} alt={`${r.name} food`} />
+                  <span className="image-badge">
+                    {r.isOnline ? 'Made fresh to order' : 'Delivery paused'}
+                  </span>
+                </div>
+                <div className="restaurant-card-content">
+                  <div className="restaurant-title">
+                    <h3>{r.name}</h3>
+                    <span className="restaurant-rating">
+                      <Star size={16} fill="currentColor" />
+                      {r.rating ? r.rating.toFixed(1) : 'New'} {r.reviews ? `(${r.reviews})` : ''}
+                    </span>
+                  </div>
+                  <p>
+                    {r.cuisine} · {r.description}
+                  </p>
+                  <div className="restaurant-meta">
+                    <span>
+                      <Clock3 size={17} />
+                      {r.eta}–{(r.eta || 25) + 10} min
+                    </span>
+                    <span>
+                      <Truck size={17} />
+                      {money(r.deliveryFeeMinor)} delivery
+                    </span>
+                    <span>
+                      <MapPin size={17} />
+                      {r.distance} km
+                    </span>
+                    <ArrowRight size={18} style={{ marginLeft: 'auto' }} />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No kitchens found">Try another restaurant name or cuisine.</Empty>
+        )}
+      </section>
+      <div
+        className="note-box section-gap"
+        style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+      >
+        <ShieldCheck size={23} />
+        <span>Thoughtful kitchens, carefully prepared food, and updates at every step.</span>
+      </div>
+    </CustomerShell>
+  );
 }

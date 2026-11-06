@@ -2,10 +2,144 @@
 import { useState } from 'react';
 import { CircleDollarSign, Download, Percent, ShoppingBag, UtensilsCrossed } from 'lucide-react';
 import { useApp } from '@/components/provider';
-import { RevenueChart,ChannelChart } from '@/components/charts';
-import { ErrorState,Loading,Metric,PageHeading } from '@/components/ui';
+import { RevenueChart, ChannelChart } from '@/components/charts';
+import { ErrorState, Loading, Metric, PageHeading } from '@/components/ui';
 import { useResource } from '@/lib/hooks';
 import { money } from '@/lib/api';
 import { downloadCsv } from '@/lib/export';
 import type { Report } from '@/lib/types';
-export default function ReportsPage() {const {user,restaurantId}=useApp();const [days,setDays]=useState(7);const {data:r,error,loading}=useResource<Report>(user?`reports/${restaurantId}?days=${days}`:null);return <><PageHeading title="A clearer picture of good business." description="Real numbers from your completed orders, with room to grow."><select aria-label="Reporting period" value={days} onChange={e=>setDays(Number(e.target.value))} style={{width:155}}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option></select><button className="btn secondary" disabled={!r} onClick={()=>r&&downloadCsv('tablelane-revenue.csv',[['Date','Revenue (minor)','Completed orders'],...r.daily.map(d=>[d.day,d.revenueMinor,d.orders])])}><Download size={17}/>Export report</button></PageHeading>{loading&&!r?<Loading/>:error?<ErrorState message={error}/>:r&&<><div className="metrics"><Metric label="Completed revenue" value={money(r.revenueMinor)} detail={`From ${r.completedOrders} completed orders`} icon={<CircleDollarSign size={18}/>}/><Metric label="Average ticket" value={money(r.averageTicketMinor)} detail="Revenue per completed order" icon={<UtensilsCrossed size={18}/>}/><Metric label="Food cost" value={`${r.foodCostPercent}%`} detail={`${money(r.foodCostMinor)} ingredients consumed`} icon={<Percent size={18}/>}/><Metric label="Orders received" value={r.totalOrders} detail={`${r.activeOrders} currently in progress`} icon={<ShoppingBag size={18}/>}/></div><div className="report-grid"><section className="panel"><div className="panel-head"><div><h2>Revenue, day by day</h2><p>Showing the most recent seven days in this period</p></div></div><RevenueChart report={r}/></section><section className="panel channels-panel"><div className="panel-head"><div><h2>Your service mix</h2><p>Completed orders across every channel</p></div></div><ChannelChart report={r}/></section></div><div className="panel section-gap"><div className="panel-head"><div><h2>The dishes doing good things</h2><p>Top items by quantity sold in this period</p></div></div><div className="table-spacer"/><div className="table-scroll"><table className="data-table"><thead><tr><th>Rank</th><th>Dish</th><th>Servings sold</th><th>Food revenue</th></tr></thead><tbody>{r.popular.map((p,i)=><tr key={p.name}><td>{String(i+1).padStart(2,'0')}</td><td><strong>{p.name}</strong></td><td>{p.qty}</td><td>{money(p.revenueMinor)}</td></tr>)}</tbody></table></div></div><p className="form-hint section-gap">Revenue includes tax, service, delivery and tips. Food cost uses recipe consumption at current ingredient costs. Times and reporting dates use Asia/Dhaka.</p></>}</>;}
+export default function ReportsPage() {
+  const { user, restaurantId } = useApp();
+  const [days, setDays] = useState(7);
+  const {
+    data: r,
+    error,
+    loading,
+  } = useResource<Report>(user ? `reports/${restaurantId}?days=${days}` : null);
+  return (
+    <>
+      <PageHeading
+        title="A clearer picture of good business."
+        description="Real numbers from your completed orders, with room to grow."
+      >
+        <select
+          aria-label="Reporting period"
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+          style={{ width: 155 }}
+        >
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
+        <button
+          className="btn secondary"
+          disabled={!r}
+          onClick={() =>
+            r &&
+            downloadCsv('tablelane-revenue.csv', [
+              ['Date', 'Revenue (minor)', 'Completed orders'],
+              ...r.daily.map((d) => [d.day, d.revenueMinor, d.orders]),
+            ])
+          }
+        >
+          <Download size={17} />
+          Export report
+        </button>
+      </PageHeading>
+      {loading && !r ? (
+        <Loading />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : (
+        r && (
+          <>
+            <div className="metrics">
+              <Metric
+                label="Completed revenue"
+                value={money(r.revenueMinor)}
+                detail={`From ${r.completedOrders} completed orders`}
+                icon={<CircleDollarSign size={18} />}
+              />
+              <Metric
+                label="Average ticket"
+                value={money(r.averageTicketMinor)}
+                detail="Revenue per completed order"
+                icon={<UtensilsCrossed size={18} />}
+              />
+              <Metric
+                label="Food cost"
+                value={`${r.foodCostPercent}%`}
+                detail={`${money(r.foodCostMinor)} ingredients consumed`}
+                icon={<Percent size={18} />}
+              />
+              <Metric
+                label="Orders received"
+                value={r.totalOrders}
+                detail={`${r.activeOrders} currently in progress`}
+                icon={<ShoppingBag size={18} />}
+              />
+            </div>
+            <div className="report-grid">
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>Revenue, day by day</h2>
+                    <p>Showing the most recent seven days in this period</p>
+                  </div>
+                </div>
+                <RevenueChart report={r} />
+              </section>
+              <section className="panel channels-panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>Your service mix</h2>
+                    <p>Completed orders across every channel</p>
+                  </div>
+                </div>
+                <ChannelChart report={r} />
+              </section>
+            </div>
+            <div className="panel section-gap">
+              <div className="panel-head">
+                <div>
+                  <h2>The dishes doing good things</h2>
+                  <p>Top items by quantity sold in this period</p>
+                </div>
+              </div>
+              <div className="table-spacer" />
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Dish</th>
+                      <th>Servings sold</th>
+                      <th>Food revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.popular.map((p, i) => (
+                      <tr key={p.name}>
+                        <td>{String(i + 1).padStart(2, '0')}</td>
+                        <td>
+                          <strong>{p.name}</strong>
+                        </td>
+                        <td>{p.qty}</td>
+                        <td>{money(p.revenueMinor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="form-hint section-gap">
+              Revenue includes tax, service, delivery and tips. Food cost uses recipe consumption at
+              current ingredient costs. Times and reporting dates use Asia/Dhaka.
+            </p>
+          </>
+        )
+      )}
+    </>
+  );
+}
