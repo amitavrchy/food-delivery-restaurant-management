@@ -6,6 +6,7 @@ import { Access, CustomerShell } from '@/components/shell';
 import { useApp } from '@/components/provider';
 import { Badge, ErrorState, Loading, Modal, PageHeading } from '@/components/ui';
 import { TrackingMap } from '@/components/tracking';
+import { OrderExtras } from '@/components/order-extras';
 import { useAction, useResource } from '@/lib/hooks';
 import { date, label, money, patch, post, terminal, time } from '@/lib/api';
 import type { Order } from '@/lib/types';
@@ -80,6 +81,7 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
                       <Clock3 color="var(--green)" size={30} />
                     </div>
                     {o.channel === 'DELIVERY' && <TrackingMap order={o} />}
+                    <OrderExtras order={o} />
                     {o.deliveryAddress && (
                       <div className="note-box section-gap">
                         <strong>Delivering to</strong>

@@ -51,6 +51,16 @@ export default function RiderPage() {
   } = useResource<Rider>(user?.role === 'RIDER' ? 'rider/profile' : null);
   const { data: offers } = useResource<Offer[]>(user?.role === 'RIDER' ? 'rider/offers' : null);
   const { data: orders } = useResource<Order[]>(user?.role === 'RIDER' ? 'orders' : null);
+  const { data: route } = useResource<{
+    method: string;
+    stops: {
+      orderId: string;
+      number: number;
+      action: string;
+      address: string | null;
+      estimatedKm: number | null;
+    }[];
+  }>(user?.role === 'RIDER' ? 'rider/route' : null);
   const { run, busy } = useAction();
   const [now, setNow] = useState(Date.now()),
     [otp, setOtp] = useState<Record<string, string>>({}),
@@ -282,6 +292,25 @@ export default function RiderPage() {
                 <h2 className="section-gap" style={{ marginBottom: 18 }}>
                   Meals in your care
                 </h2>
+                {!!route?.stops.length && (
+                  <details className="panel panel-body section-gap">
+                    <summary>Suggested stop sequence</summary>
+                    <p className="form-hint section-gap">{route.method}</p>
+                    <ol>
+                      {route.stops.map((s) => (
+                        <li key={s.orderId} className="section-gap">
+                          <strong>
+                            #{s.number} · {s.action === 'PICKUP' ? 'Pickup' : 'Drop-off'}
+                          </strong>
+                          <p>
+                            {s.address}
+                            {s.estimatedKm != null ? ` · ${s.estimatedKm} km straight line` : ''}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
                 {active.length ? (
                   <div className="order-grid">
                     {active.map((o) => {
@@ -310,8 +339,49 @@ export default function RiderPage() {
                           </div>
                           <div className="info-pair">
                             <span>Collect from customer</span>
-                            <strong>{money(o.grandMinor)}</strong>
+                            <strong>
+                              {money(
+                                o.payments?.some((p) => p.status === 'CAPTURED') ? 0 : o.grandMinor,
+                              )}
+                            </strong>
                           </div>
+                          {o.deliveryPhone && (
+                            <a className="text-link" href={`tel:${o.deliveryPhone}`}>
+                              Call customer
+                            </a>
+                          )}
+                          {['PICKED_UP', 'ARRIVING'].includes(o.status) && (
+                            <label className="section-gap">
+                              Delivery photo (optional, up to 3)
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                disabled={busy}
+                                onChange={async (e) => {
+                                  const photo = e.target.files?.[0];
+                                  if (!photo) return;
+                                  const form = new FormData();
+                                  form.append('photo', photo);
+                                  await run(async () => {
+                                    const response = await fetch(
+                                      `/api/rider/orders/${o.id}/proof`,
+                                      { method: 'POST', credentials: 'include', body: form },
+                                    );
+                                    const result = await response.json();
+                                    if (!response.ok)
+                                      throw new Error(result.message || 'Photo upload failed.');
+                                    return result;
+                                  }, 'Delivery photo attached.');
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          )}
+                          {!!o.proofs?.length && (
+                            <p className="form-hint">
+                              {o.proofs.length} delivery photo(s) attached.
+                            </p>
+                          )}
                           <a
                             target="_blank"
                             rel="noreferrer"

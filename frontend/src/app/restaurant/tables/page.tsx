@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { ComplimentaryCheck } from '@/components/operational-editors';
+import { CheckActions } from '@/components/check-actions';
 import { useApp } from '@/components/provider';
 import { FoodCard, ProductModal, linePrice } from '@/components/product';
 import { OrderModal } from '@/components/order-table';
@@ -214,7 +215,7 @@ export default function TablesPage() {
                   <strong>{money(split?.dueMinor || 0)}</strong>
                 </div>
               </div>
-              {check && split && split.dueMinor > 0 && (
+              {check && split && check.orders.some((o) => o.status !== 'CANCELLED') && (
                 <button
                   className="btn primary wide"
                   disabled={!!draft.length}
@@ -228,6 +229,13 @@ export default function TablesPage() {
                 <Printer size={17} />
                 Print check
               </button>
+              {check && (
+                <CheckActions
+                  checkId={check.id}
+                  tables={tables || []}
+                  onMoved={() => setSelected(null)}
+                />
+              )}
               {check &&
                 ['RESTAURANT_OWNER', 'MANAGER'].includes(user?.role || '') &&
                 split &&
@@ -252,7 +260,8 @@ export default function TablesPage() {
                 </button>
               )}
               <p className="form-hint section-gap">
-                Dine in includes 5% VAT and 5% service charge. All rounds must be served before
+                Dine in includes {(menu?.taxBps ?? 500) / 100}% VAT and{' '}
+                {(menu?.serviceBps ?? 500) / 100}% service charge. All rounds must be served before
                 settlement.
               </p>
             </section>
@@ -463,7 +472,7 @@ function SettleBill({
           <input
             required
             type="number"
-            min={0.01}
+            min={split.dueMinor === 0 ? 0 : 0.01}
             step=".01"
             max={split.dueMinor / 100}
             value={amount}

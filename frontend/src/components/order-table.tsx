@@ -11,6 +11,7 @@ import {
 import { Badge, Empty, Modal } from './ui';
 import { date, label, money, nextStatus, patch, terminal, time } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
+import { OrderExtras } from './order-extras';
 import type { Order } from '@/lib/types';
 export function OrderTable({ orders }: { orders: Order[] }) {
   const [selected, setSelected] = useState<Order | null>(null);
@@ -151,6 +152,7 @@ export function OrderModal({ order: o, onClose }: { order: Order; onClose: () =>
       </div>
       {o.deliveryAddress && <div className="note-box">{o.deliveryAddress}</div>}
       {o.notes && <div className="note-box section-gap">Kitchen notes: {o.notes}</div>}
+      <OrderExtras order={o} management />
       {cancel ? (
         <form
           className="form-stack section-gap"
