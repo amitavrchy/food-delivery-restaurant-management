@@ -5,6 +5,8 @@ import { PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import { io } from 'socket.io-client';
+import { unlink } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 const db = new PrismaClient();
 const base = process.env.TEST_API_URL || 'http://localhost:4000/api';
 const suffix = randomUUID().slice(0, 8),
@@ -355,6 +357,37 @@ test(
               (await request(`orders/${deliveryId}/status`, 'PATCH', { status }, rider1)).status,
               200,
             );
+          const photo = new FormData();
+          photo.append(
+            'photo',
+            new Blob(
+              [
+                Buffer.from(
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aU1EAAAAASUVORK5CYII=',
+                  'base64',
+                ),
+              ],
+              { type: 'image/png' },
+            ),
+            'proof.png',
+          );
+          const upload = await fetch(`${base}/rider/orders/${deliveryId}/proof`, {
+            method: 'POST',
+            headers: { cookie: rider1 },
+            body: photo,
+          });
+          assert.equal(upload.status, 201);
+          const proof = await upload.json();
+          const ownProof = await fetch(`${base}/delivery-proofs/${proof.id}`, {
+            headers: { cookie: customer },
+          });
+          assert.equal(ownProof.status, 200);
+          assert.equal(ownProof.headers.get('content-type'), 'image/png');
+          assert.equal(
+            (await fetch(`${base}/delivery-proofs/${proof.id}`, { headers: { cookie: rider2 } }))
+              .status,
+            403,
+          );
           assert.equal(
             (
               await request(
@@ -654,6 +687,13 @@ test(
       const orderIds = (
         await db.order.findMany({ where: { restaurantId: rid }, select: { id: true } })
       ).map((o) => o.id);
+      const proofs = await db.deliveryProof.findMany({ where: { orderId: { in: orderIds } } });
+      const proofRoot = resolve(process.cwd(), 'storage/proofs');
+      for (const proof of proofs) {
+        const path = resolve(proofRoot, proof.storageKey);
+        if (!path.startsWith(proofRoot + sep)) throw new Error('Unsafe proof cleanup path');
+        await unlink(path);
+      }
       await db.rating.deleteMany({ where: { orderId: { in: orderIds } } });
       await db.payment.deleteMany({ where: { orderId: { in: orderIds } } });
       await db.riderOffer.deleteMany({ where: { orderId: { in: orderIds } } });

@@ -157,7 +157,11 @@ export class ProcurementController {
         if (
           existing.purchaseOrderId !== orderId ||
           existing.invoiceReference !== data.invoiceReference ||
-          JSON.stringify(existing.lines) !== JSON.stringify(data.lines)
+          JSON.stringify(
+            (existing.lines as { lineId: string; qty: number }[])
+              .map((l) => [l.lineId, l.qty])
+              .sort(),
+          ) !== JSON.stringify(data.lines.map((l) => [l.lineId, l.qty]).sort())
         )
           throw new ConflictException('Receipt key was reused with different details.');
         return existing;
