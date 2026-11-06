@@ -83,17 +83,26 @@ backend/src/realtime.ts    Authorized Socket.IO rooms
 backend/src/jobs.ts        Durable BullMQ operations
 backend/prisma/            Schema, migrations and repeatable seed
 backend/test/              Unit and database/API tests
-tests/                     Browser acceptance tests
+frontend/tests/            Browser acceptance tests
 ```
 
 ## Deployment boundaries
 
 This application runs locally with persistent data. **It has not been deployed publicly.**
 
-- Cash on delivery and counter settlement work. POS card payment records money collected on an external terminal; it does not charge a card. Live Stripe, SSLCommerz or bKash checkout requires provider adapters/credentials. The generic signed webhook is an adapter contract.
+- Cash on delivery and counter settlement work. POS card payment records money collected on an external terminal. Hosted Stripe checkout, signed raw-body webhooks, partial refunds and refund reconciliation are implemented; configure `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and the correct `APP_URL` to enable them. Live provider charging has not been exercised with real credentials. SSLCommerz and bKash adapters are not included.
 - Rider coordinates stream when browser permission is granted. Leaflet renders restaurant, delivery and rider markers over OpenStreetMap tiles. Road routing and traffic-aware ETA need a routing integration. Tile URL/attribution are configurable for production providers.
-- Photo proof, SMS/email notifications, optional reservations/branch grouping, staff invitations and dispute administration are not implemented. Restaurant/team provisioning uses the seed or an operator-managed workflow. Inventory deduction timing and 5% VAT/service policies are fixed.
+- Private delivery-photo uploads, reservations/waitlist/floor planning, organizations/branch provisioning, invitations, scheduled shifts/leave, procurement/partial receipts/transfers, loyalty, scoped promotions and guest support are implemented. Restaurant VAT/service, minimum order, delivery radius, weekly hours and loyalty are configurable. Kitchen completion remains the stock consumption point. Support refund records document external transactions; use the separate Stripe refund action to return card funds.
+- Notifications are delivered in the private in-app inbox. SMS, email delivery, offline POS synchronization, fiscal-device integrations and external payroll/accounting connectors require additional providers. Invitations generate a private share link; the app does not claim to send an email.
 - Current Socket.IO rooms assume one API instance. Horizontal scaling requires a Redis socket adapter and event outbox. Configure trusted-proxy/IP limiting before public hosting.
 - For production, use a fresh database without demo users, strong secrets/PINs, `DEMO_SEED=false`, actual CORS/app/socket origins, `NODE_ENV=production` and HTTPS. The API rejects default production JWT/PIN settings. Apply migrations before startup and back up PostgreSQL.
 
 See [architecture](docs/architecture.md), [API](docs/api.md) and [spec coverage](docs/spec-coverage.md) for details and explicit limits.
+
+## Advanced workspaces
+
+Open **Enterprise tools** in the restaurant sidebar for Command center, Organizations & branches, Reservations & waitlist, Purchasing & transfers, Workforce planning, Marketing, Business insights, Delivery control and Guest support. Customer **My account** contains addresses, favorites, rewards, bookings, support conversations and staff self service. Checkout supports saved addresses, scheduling and reward redemption. Rider workspace includes suggested stop sequencing, customer calling and private photo evidence.
+
+The seed supplies a two-branch organization, supplier purchase orders, reservation/waitlist examples, planned shifts, dietary/allergen metadata and a loyalty ledger. All are persisted examples, editable through their scoped workflows.
+
+If another project uses ports 3000/4000, configure the API `PORT`, `CORS_ORIGINS`, `APP_URL`, frontend `API_URL` and `NEXT_PUBLIC_SOCKET_URL` consistently. Set `PLAYWRIGHT_BASE_URL` and `TEST_API_URL` for checks against alternate ports. Frontend API rewrites and public socket settings must be present when building Next.js.

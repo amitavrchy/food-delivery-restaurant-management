@@ -34,28 +34,31 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix frontend
       - name: Configure isolated demo environment
         run: |
           cp backend/.env.example backend/.env
           cp frontend/.env.example frontend/.env.local
-      - run: npm run db:generate
-      - run: npm run db:migrate
-      - run: npm run db:seed
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - run: npm run db:generate --prefix backend
+      - run: npm run db:migrate --prefix backend
+      - run: npm run db:seed --prefix backend
+      - run: npm run verify --prefix backend
       - run: npx playwright install --with-deps chromium --no-shell
+        working-directory: frontend
       - name: Start API and verify data invariants
         run: |
-          npm run start -w backend > /tmp/tablelane-api.log 2>&1 &
+          npm run start --prefix backend > /tmp/tablelane-api.log 2>&1 &
           for attempt in $(seq 1 30); do curl -fsS http://localhost:4000/api/health && break || sleep 2; done
-          npm run test:integration
+          npm run test:integration --prefix backend
       - name: Browser acceptance
         run: |
-          npm run start -w frontend > /tmp/tablelane-web.log 2>&1 &
+          npm run start --prefix frontend > /tmp/tablelane-web.log 2>&1 &
           for attempt in $(seq 1 30); do curl -fsS http://localhost:3000 > /dev/null && break || sleep 2; done
-          npm run test:e2e
+          npm run test:e2e --prefix frontend
         env:
           PLAYWRIGHT_EXTERNAL_SERVER: '1'
       - uses: actions/upload-artifact@v7
@@ -63,6 +66,6 @@ jobs:
         with:
           name: browser-report
           path: |
-            playwright-report
-            artifacts
-            test-results
+            frontend/playwright-report
+            frontend/artifacts
+            frontend/test-results

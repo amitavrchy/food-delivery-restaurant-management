@@ -30,4 +30,23 @@ Stock: `{ "delta": 5, "reason": "RESTOCK", "notes": "Supplier delivery 42" }`; W
 
 Connect Socket.IO to the API origin with credentials. Emit `join` with `order:ORDER_ID`, `restaurant:RESTAURANT_ID:orders` or `kds:RESTAURANT_ID:STATION_ID`; acknowledgement indicates access. Private user rooms are server-selected. Events: `order.updated`, `ticket.updated`, `rider.offer`, `rider.location`, `dispatch.alert`.
 
-The generic webhook expects `paymentId`, `providerReference`, `amountMinor`, and `status`. Sign `JSON.stringify(payload)` with HMAC-SHA256 and `PAYMENT_WEBHOOK_SECRET`; send its hex digest as `x-payment-signature`. PENDING → CAPTURED/FAILED and CAPTURED → REFUNDED are allowed; identical replays are harmless. COD/COUNTER are excluded. A real provider requires its own checkout/signature adapter.
+The generic webhook expects `paymentId`, `providerReference`, `amountMinor`, and `status`. Sign `JSON.stringify(payload)` with HMAC-SHA256 and `PAYMENT_WEBHOOK_SECRET`; send its hex digest as `x-payment-signature`. PENDING → CAPTURED/FAILED and CAPTURED → REFUNDED are allowed; identical replays are harmless. COD/COUNTER/STRIPE are excluded. Stripe uses its dedicated raw-body signature adapter.
+
+## Enterprise and marketplace routes
+
+| Area | Routes | Access |
+| --- | --- | --- |
+| Customer | `GET/POST account/addresses`, `DELETE account/addresses/:id`, `PATCH account/addresses/:id/default`, `GET account/loyalty`, `GET account/favorites`, `POST/DELETE account/favorites/:restaurantId` | Current user only |
+| Inbox | `GET notifications`, `PATCH notifications/:id/read`, `POST notifications/read-all` | Current user only |
+| Promotions | `GET promotions?restaurantId=`, `GET/POST marketing/:restaurantId`, `PATCH marketing/promotions/:id` | Public eligible offers; scoped manager write |
+| Support | `GET/POST support`, `POST support/:id/messages`, `PATCH support/:id` | Own customer threads or scoped managers |
+| Hospitality | `GET/POST hospitality/reservations`, `PATCH hospitality/reservations/:id`, `GET/POST hospitality/:restaurantId/waitlist`, `PATCH hospitality/waitlist/:id`, `POST hospitality/:restaurantId/tables`, `PATCH hospitality/tables/:id` | Own bookings; scoped service/manager actions |
+| Organizations | `GET/POST organizations`, `POST organizations/:id/branches`, `GET organizations/:id/report` | Organization owner or platform admin |
+| Procurement | `GET procurement/:restaurantId`, `POST procurement/:restaurantId/suppliers`, `POST procurement/:restaurantId/orders`, `PATCH procurement/orders/:id`, `POST procurement/orders/:id/receive`, `POST procurement/transfers` | Scoped managers; both branches required for transfers |
+| Workforce | `GET enterprise/:restaurantId/team`, `POST enterprise/:restaurantId/invites`, `POST enterprise/invites/accept`, `PATCH enterprise/invites/:id/revoke`, `PATCH enterprise/members/:id`, `POST enterprise/:restaurantId/shifts`, `PATCH enterprise/shifts/:id/cancel`, `GET team/my-work`, `POST enterprise/:restaurantId/leave`, `PATCH enterprise/leave/:id` | Scoped planning; own invitation/leave/self service |
+| Insight/control | `GET enterprise/:restaurantId/insights`, `GET enterprise/:restaurantId/dispatch` | Scoped managers |
+| Advanced POS | `POST pos/checks/:id/discount`, `POST pos/checks/:id/move`, `POST pos/checks/:id/merge` | Scoped staff; manager/PIN for discount |
+| Rider evidence | `GET rider/route`, `POST rider/orders/:id/proof` (multipart `photo`), `GET delivery-proofs/:id` | Assigned rider; download also customer/scoped manager |
+| Stripe | `GET payments/stripe/config`, `POST payments/stripe/session`, `POST payments/stripe/webhook`, `POST payments/stripe/refund` | Own pending checkout, signed provider event, manager/PIN refund |
+
+Scheduled checkout accepts `scheduledFor` (30 minutes to seven days), `redeemPoints` and optional `deliveryPhone`. Restaurant settings accept basis-point tax/service rates, minimum food subtotal, delivery radius, loyalty and complete weekday opening windows. Receipt/refund/transfer callers must retain their idempotency key when retrying an uncertain result. Support refund records require an external reference and do not transfer funds.
