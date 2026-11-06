@@ -1,0 +1,328 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  name String
+  passwordHash String
+  role String @default("CUSTOMER")
+  createdAt DateTime @default(now())
+  memberships UserRestaurantRole[]
+  orders Order[]
+  rider RiderProfile?
+  shifts Shift[]
+}
+model UserRestaurantRole {
+  id String @id @default(cuid())
+  userId String
+  restaurantId String
+  role String
+  user User @relation(fields:[userId], references:[id])
+  restaurant Restaurant @relation(fields:[restaurantId], references:[id])
+  @@unique([userId,restaurantId,role])
+}
+model Restaurant {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  cuisine String
+  description String
+  image String
+  address String
+  status String @default("ACTIVE")
+  lat Float
+  lng Float
+  timezone String @default("Asia/Dhaka")
+  autoAccept Boolean @default(false)
+  isOnline Boolean @default(true)
+  commissionBps Int @default(1500)
+  deliveryFeeMinor Int @default(4900)
+  categories MenuCategory[]
+  items MenuItem[]
+  stations PrepStation[]
+  inventory InventoryItem[]
+  tables DiningTable[]
+  staff UserRestaurantRole[]
+  orders Order[]
+  shifts Shift[]
+}
+model MenuCategory {
+  id String @id @default(cuid())
+  restaurantId String
+  name String
+  sort Int @default(0)
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  items MenuItem[]
+}
+model MenuItem {
+  id String @id @default(cuid())
+  restaurantId String
+  categoryId String
+  stationId String
+  name String
+  description String
+  image String
+  priceMinor Int
+  isAvailable Boolean @default(true)
+  archived Boolean @default(false)
+  prepMinutes Int @default(15)
+  availableFrom Int @default(0)
+  availableUntil Int @default(24)
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  category MenuCategory @relation(fields:[categoryId],references:[id])
+  station PrepStation @relation(fields:[stationId],references:[id])
+  modifierGroups ModifierGroup[]
+  recipe RecipeComponent[]
+  lines OrderLine[]
+}
+model ModifierGroup {
+  id String @id @default(cuid())
+  menuItemId String
+  name String
+  minSelect Int @default(0)
+  maxSelect Int @default(1)
+  item MenuItem @relation(fields:[menuItemId],references:[id])
+  options ModifierOption[]
+}
+model ModifierOption {
+  id String @id @default(cuid())
+  groupId String
+  name String
+  priceDeltaMinor Int @default(0)
+  inventoryItemId String?
+  ingredientQty Decimal @default(0) @db.Decimal(14,3)
+  group ModifierGroup @relation(fields:[groupId],references:[id])
+}
+model RecipeComponent {
+  id String @id @default(cuid())
+  menuItemId String
+  inventoryItemId String
+  qty Decimal @db.Decimal(14,3)
+  item MenuItem @relation(fields:[menuItemId],references:[id])
+  ingredient InventoryItem @relation(fields:[inventoryItemId],references:[id])
+  @@unique([menuItemId,inventoryItemId])
+}
+model InventoryItem {
+  id String @id @default(cuid())
+  restaurantId String
+  name String
+  uom String
+  qtyOnHand Decimal @db.Decimal(14,3)
+  lowStockQty Decimal @db.Decimal(14,3)
+  costMinor Int @default(0)
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  components RecipeComponent[]
+  movements StockMovement[]
+}
+model StockMovement {
+  id String @id @default(cuid())
+  inventoryItemId String
+  delta Decimal @db.Decimal(14,3)
+  reason String
+  reference String?
+  byUserId String
+  createdAt DateTime @default(now())
+  item InventoryItem @relation(fields:[inventoryItemId],references:[id])
+}
+model PrepStation {
+  id String @id @default(cuid())
+  restaurantId String
+  name String
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  items MenuItem[]
+  tickets KitchenTicket[]
+}
+model DiningTable {
+  id String @id @default(cuid())
+  restaurantId String
+  code String
+  seats Int
+  posX Float @default(0)
+  posY Float @default(0)
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  checks TableCheck[]
+  @@unique([restaurantId,code])
+}
+model TableCheck {
+  id String @id @default(cuid())
+  tableId String
+  status String @default("OPEN")
+  openedAt DateTime @default(now())
+  closedAt DateTime?
+  table DiningTable @relation(fields:[tableId],references:[id])
+  orders Order[]
+  payments CheckPayment[]
+}
+model CheckPayment {
+  id String @id @default(cuid())
+  checkId String
+  amountMinor Int
+  method String
+  seat Int?
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+  check TableCheck @relation(fields:[checkId],references:[id])
+}
+model Order {
+  id String @id @default(cuid())
+  number Int @unique @default(autoincrement())
+  restaurantId String
+  customerId String
+  channel String
+  status String @default("PLACED")
+  tableCheckId String?
+  riderId String?
+  goodsMinor Int
+  deliveryFeeMinor Int @default(0)
+  discountMinor Int @default(0)
+  taxMinor Int @default(0)
+  tipMinor Int @default(0)
+  serviceMinor Int @default(0)
+  grandMinor Int
+  deliveryAddress String?
+  dropLat Float?
+  dropLng Float?
+  notes String @default("")
+  cancelReason String?
+  penaltyMinor Int @default(0)
+  otpHash String?
+  idempotencyKey String @unique
+  placedAt DateTime @default(now())
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  customer User @relation(fields:[customerId],references:[id])
+  rider RiderProfile? @relation(fields:[riderId],references:[userId])
+  check TableCheck? @relation(fields:[tableCheckId],references:[id])
+  lines OrderLine[]
+  history OrderStatusHistory[]
+  tickets KitchenTicket[]
+  offers RiderOffer[]
+  payments Payment[]
+  rating Rating?
+  @@index([restaurantId,status])
+  @@index([customerId,placedAt])
+  @@index([riderId,status])
+}
+model OrderLine {
+  id String @id @default(cuid())
+  orderId String
+  menuItemId String
+  nameSnapshot String
+  qty Int
+  unitPriceMinor Int
+  seat Int @default(1)
+  course String @default("MAIN")
+  modifiers Json
+  order Order @relation(fields:[orderId],references:[id])
+  item MenuItem @relation(fields:[menuItemId],references:[id])
+}
+model OrderStatusHistory {
+  id String @id @default(cuid())
+  orderId String
+  fromStatus String?
+  toStatus String
+  at DateTime @default(now())
+  byUserId String
+  reason String?
+  order Order @relation(fields:[orderId],references:[id])
+}
+model KitchenTicket {
+  id String @id @default(cuid())
+  orderId String
+  stationId String
+  status String @default("QUEUED")
+  items Json
+  course String @default("MAIN")
+  fireAt DateTime @default(now())
+  doneAt DateTime?
+  inventoryDeducted Boolean @default(false)
+  order Order @relation(fields:[orderId],references:[id])
+  station PrepStation @relation(fields:[stationId],references:[id])
+  @@index([stationId,status])
+}
+model RiderProfile {
+  userId String @id
+  status String @default("OFFLINE")
+  lat Float?
+  lng Float?
+  vehicle String @default("Bicycle")
+  documentRef String?
+  verified Boolean @default(false)
+  ratingAvg Float @default(4.8)
+  capacity Int @default(2)
+  lastPingAt DateTime?
+  user User @relation(fields:[userId],references:[id])
+  orders Order[]
+  offers RiderOffer[]
+  pings RiderLocationPing[]
+}
+model RiderOffer {
+  id String @id @default(cuid())
+  orderId String
+  riderId String
+  status String @default("SENT")
+  expiresAt DateTime
+  order Order @relation(fields:[orderId],references:[id])
+  rider RiderProfile @relation(fields:[riderId],references:[userId])
+  @@index([orderId,status])
+  @@index([riderId,status])
+}
+model RiderLocationPing {
+  id String @id @default(cuid())
+  riderId String
+  lat Float
+  lng Float
+  at DateTime @default(now())
+  rider RiderProfile @relation(fields:[riderId],references:[userId])
+  @@index([riderId,at])
+}
+model Payment {
+  id String @id @default(cuid())
+  orderId String
+  provider String
+  status String @default("PENDING")
+  amountMinor Int
+  providerReference String? @unique
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+  order Order @relation(fields:[orderId],references:[id])
+}
+model Shift {
+  id String @id @default(cuid())
+  restaurantId String
+  userId String
+  startedAt DateTime @default(now())
+  endedAt DateTime?
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  user User @relation(fields:[userId],references:[id])
+}
+model PromoCode {
+  id String @id @default(cuid())
+  code String @unique
+  type String
+  value Int
+  minOrderMinor Int @default(0)
+  maxDiscountMinor Int @default(100000)
+  active Boolean @default(true)
+  expiresAt DateTime?
+}
+model Rating {
+  id String @id @default(cuid())
+  orderId String @unique
+  stars Int
+  comment String
+  createdAt DateTime @default(now())
+  order Order @relation(fields:[orderId],references:[id])
+}
+model AuditLog {
+  id String @id @default(cuid())
+  actorId String
+  action String
+  entityId String
+  detail Json
+  createdAt DateTime @default(now())
+}
