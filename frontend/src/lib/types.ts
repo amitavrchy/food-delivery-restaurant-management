@@ -126,7 +126,9 @@ export type Ticket = {
   fireAt: string;
   items: { name: string; qty: number; modifiers: { name: string }[] }[];
   station: { name: string };
-  order: Order & { check: { table: { code: string } } | null };
+  order: Pick<Order, 'id' | 'number' | 'channel' | 'status' | 'notes' | 'restaurantId'> & {
+    check: { table: { code: string } } | null;
+  };
 };
 export type Report = {
   period: number;

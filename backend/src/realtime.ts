@@ -80,11 +80,16 @@ export class Events implements OnGatewayConnection, OnGatewayInit {
   }
   order(
     order: { id: string; restaurantId: string; customerId: string; riderId: string | null },
-    data: unknown,
+    data: { id: string; status: string; message?: string },
   ) {
-    this.emit(`order:${order.id}`, 'order.updated', data);
-    this.emit(`restaurant:${order.restaurantId}:orders`, 'order.updated', data);
-    this.emit(`user:${order.customerId}`, 'order.updated', data);
-    if (order.riderId) this.emit(`user:${order.riderId}`, 'order.updated', data);
+    const payload = {
+      id: data.id,
+      status: data.status,
+      ...(data.message ? { message: data.message } : {}),
+    };
+    this.emit(`order:${order.id}`, 'order.updated', payload);
+    this.emit(`restaurant:${order.restaurantId}:orders`, 'order.updated', payload);
+    this.emit(`user:${order.customerId}`, 'order.updated', payload);
+    if (order.riderId) this.emit(`user:${order.riderId}`, 'order.updated', payload);
   }
 }

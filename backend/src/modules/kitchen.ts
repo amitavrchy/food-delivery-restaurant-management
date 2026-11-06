@@ -174,7 +174,20 @@ export class KitchenController {
         ...(station ? { stationId: station } : {}),
         status: { notIn: ['BUMPED', 'VOID'] },
       },
-      include: { station: true, order: { include: { check: { include: { table: true } } } } },
+      include: {
+        station: true,
+        order: {
+          select: {
+            id: true,
+            number: true,
+            channel: true,
+            status: true,
+            notes: true,
+            restaurantId: true,
+            check: { include: { table: true } },
+          },
+        },
+      },
       orderBy: { fireAt: 'asc' },
     });
   }

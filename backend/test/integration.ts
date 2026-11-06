@@ -193,6 +193,8 @@ test(
           );
           const tickets = await request(`kds/${rid}?station=${stationId}`, 'GET', undefined, owner);
           assert.equal(tickets.data.length, 1);
+          assert.equal(tickets.data[0].order.otpHash, undefined);
+          assert.equal(tickets.data[0].order.deliveryAddress, undefined);
           const ticketId = tickets.data[0].id;
           assert.equal(
             (await request(`kds/${rid}?station=wrong-station`, 'GET', undefined, owner)).data
@@ -303,6 +305,43 @@ test(
               .timeout(3000)
               .emitWithAck('join', { room: `kds:${rid}:${stationId}` });
             assert.equal(denied.ok, false);
+            const takeaway = await request(
+              'orders',
+              'POST',
+              { ...payload, channel: 'TAKEAWAY', idempotencyKey: randomUUID() },
+              customer,
+            );
+            assert.equal(takeaway.status, 201);
+            await request(
+              `orders/${takeaway.data.id}/status`,
+              'PATCH',
+              { status: 'ACCEPTED' },
+              owner,
+            );
+            const kitchenTicket = await db.kitchenTicket.findFirstOrThrow({
+              where: { orderId: takeaway.data.id },
+            });
+            const update = socket
+              .timeout(5000)
+              .emitWithAck('join', { room: `order:${takeaway.data.id}` });
+            await update;
+            const event = new Promise<Record<string, unknown>>((resolve, reject) => {
+              const timer = setTimeout(() => reject(new Error('Order event timed out')), 5000);
+              socket.once('order.updated', (data) => {
+                clearTimeout(timer);
+                resolve(data);
+              });
+            });
+            await request(`kds/${kitchenTicket.id}`, 'PATCH', { status: 'COOKING' }, owner);
+            const summary = await event;
+            assert.deepEqual(Object.keys(summary).sort(), ['id', 'status']);
+            assert.equal(summary.status, 'IN_KITCHEN');
+            await request(
+              `orders/${takeaway.data.id}/status`,
+              'PATCH',
+              { status: 'CANCELLED', reason: 'Privacy regression cleanup' },
+              owner,
+            );
           } finally {
             socket.disconnect();
           }
