@@ -117,7 +117,7 @@ export class PosController {
     ]);
     const data = parse(
       z.object({
-        amountMinor: money.refine((v) => v > 0),
+        amountMinor: money,
         method: z.enum(['CASH', 'CARD']),
         seat: z.number().int().min(1).max(30).optional(),
         lineId: id.optional(),
@@ -148,6 +148,8 @@ export class PosController {
         check.payments.reduce((s, p) => s + p.amountMinor, 0);
       if (data.amountMinor > due)
         throw new ConflictException('Payment exceeds the remaining balance.');
+      if (!check.orders.length || (data.amountMinor === 0 && due > 0))
+        throw new ConflictException('Enter a positive payment for the remaining balance.');
       if (data.lineId) {
         if (check.payments.some((p) => !p.lineId))
           throw new ConflictException(
