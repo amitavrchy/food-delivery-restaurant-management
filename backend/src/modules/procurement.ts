@@ -154,8 +154,12 @@ export class ProcurementController {
         where: { idempotencyKey: data.idempotencyKey },
       });
       if (existing) {
-        if (existing.purchaseOrderId !== orderId)
-          throw new ConflictException('Receipt key was used for another order.');
+        if (
+          existing.purchaseOrderId !== orderId ||
+          existing.invoiceReference !== data.invoiceReference ||
+          JSON.stringify(existing.lines) !== JSON.stringify(data.lines)
+        )
+          throw new ConflictException('Receipt key was reused with different details.');
         return existing;
       }
       const current = required(

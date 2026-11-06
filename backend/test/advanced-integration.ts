@@ -226,7 +226,86 @@ test(
           );
         }
       });
+      await t.test(
+        'scheduled checkout holds kitchen work and restores redeemed rewards on cancellation',
+        async () => {
+          const station = await db.prepStation.create({
+              data: { restaurantId: rid, name: 'Acceptance station' },
+            }),
+            category = await db.menuCategory.create({
+              data: { restaurantId: rid, name: 'Acceptance dishes' },
+            });
+          const item = await db.menuItem.create({
+            data: {
+              restaurantId: rid,
+              categoryId: category.id,
+              stationId: station.id,
+              name: 'Acceptance meal',
+              description: 'Test dish',
+              image: '/food/burger.jpg',
+              priceMinor: 10000,
+              prepMinutes: 10,
+            },
+          });
+          await db.loyaltyEntry.create({
+            data: { userId: 'customer', kind: 'TEST', points: 100, reason: prefix },
+          });
+          const before = (await request('account/loyalty', customer)).data.points;
+          const r = await request('orders', customer, 'POST', {
+            restaurantId: rid,
+            channel: 'TAKEAWAY',
+            lines: [{ menuItemId: item.id, qty: 1 }],
+            paymentMethod: 'COUNTER',
+            scheduledFor: new Date(Date.now() + 86400000).toISOString(),
+            redeemPoints: 5,
+            idempotencyKey: randomUUID(),
+          });
+          assert.equal(r.status, 201, JSON.stringify(r.data));
+          assert.equal(r.data.status, 'PLACED');
+          assert.equal(await db.kitchenTicket.count({ where: { orderId: r.data.id } }), 0);
+          assert.equal((await request('account/loyalty', customer)).data.points, before - 5);
+          assert.equal(
+            (await request(`orders/${r.data.id}/status`, owner, 'PATCH', { status: 'ACCEPTED' }))
+              .status,
+            409,
+          );
+          assert.equal(
+            (
+              await request(`orders/${r.data.id}/status`, customer, 'PATCH', {
+                status: 'CANCELLED',
+                reason: 'Acceptance cancellation',
+              })
+            ).status,
+            200,
+          );
+          assert.equal((await request('account/loyalty', customer)).data.points, before);
+          const far = await request('orders', customer, 'POST', {
+            restaurantId: rid,
+            channel: 'DELIVERY',
+            deliveryAddress: 'Outside service area, far away',
+            dropLat: 0,
+            dropLng: 0,
+            lines: [{ menuItemId: item.id, qty: 1 }],
+            idempotencyKey: randomUUID(),
+          });
+          assert.equal(far.status, 409);
+        },
+      );
     } finally {
+      const orderIds = (
+        await db.order.findMany({ where: { restaurantId: rid }, select: { id: true } })
+      ).map((o) => o.id);
+      await db.notification.deleteMany({
+        where: { href: { in: orderIds.map((id) => `/orders/${id}`) } },
+      });
+      await db.payment.deleteMany({ where: { orderId: { in: orderIds } } });
+      await db.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
+      await db.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
+      await db.order.deleteMany({ where: { restaurantId: rid } });
+      await db.loyaltyEntry.deleteMany({ where: { reason: prefix } });
+      await db.menuItem.deleteMany({ where: { restaurantId: rid } });
+      await db.prepStation.deleteMany({ where: { restaurantId: rid } });
+      await db.menuCategory.deleteMany({ where: { restaurantId: rid } });
       await db.notification.deleteMany({
         where: {
           OR: [

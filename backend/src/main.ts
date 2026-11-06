@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app';
 import { Cache } from './redis';
 import { DatabaseErrors } from './errors';
+import { tokenActor } from './auth';
 async function bootstrap() {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)
     throw new Error('JWT_SECRET must contain at least 32 characters.');
@@ -34,8 +35,19 @@ async function bootstrap() {
     )
       return res.status(403).json({ message: 'Origin not allowed.' });
     try {
-      const auth = req.path.startsWith('/api/auth/');
-      const key = `limit:${auth ? 'auth' : 'api'}:${req.socket.remoteAddress}`;
+      const auth =
+        req.method === 'POST' && ['/api/auth/login', '/api/auth/register'].includes(req.path);
+      let identity = `ip:${req.socket.remoteAddress}`;
+      if (!auth) {
+        try {
+          const token = req.cookies?.session || req.headers.authorization?.replace(/^Bearer /, '');
+          const actor = tokenActor(token || '');
+          if (typeof actor.sub === 'string') identity = `user:${actor.sub}`;
+        } catch {
+          /* Anonymous traffic retains its IP limit. */
+        }
+      }
+      const key = `limit:v2:${auth ? 'auth' : 'api'}:${identity}`;
       const count = await cache.redis.incr(key);
       if (count === 1) await cache.redis.expire(key, 60);
       if (count > (auth ? 60 : 600))
