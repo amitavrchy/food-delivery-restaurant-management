@@ -12,3 +12,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.tsbuildinfo
+test-results/
+playwright-report/
+artifacts/
+.env.production

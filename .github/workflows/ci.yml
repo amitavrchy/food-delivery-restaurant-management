@@ -1,0 +1,68 @@
+name: Product checks
+permissions:
+  contents: read
+concurrency:
+  group: product-${{ github.ref }}
+  cancel-in-progress: true
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: tablelane
+          POSTGRES_PASSWORD: tablelane_dev
+          POSTGRES_DB: tablelane
+        ports: [5434:5432]
+        options: >-
+          --health-cmd "pg_isready -U tablelane"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: [6381:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Configure isolated demo environment
+        run: |
+          cp backend/.env.example backend/.env
+          cp frontend/.env.example frontend/.env.local
+      - run: npm run db:generate
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium --no-shell
+      - name: Start API and verify data invariants
+        run: |
+          npm run start -w backend > /tmp/tablelane-api.log 2>&1 &
+          for attempt in $(seq 1 30); do curl -fsS http://localhost:4000/api/health && break || sleep 2; done
+          npm run test:integration
+      - name: Browser acceptance
+        run: |
+          npm run start -w frontend > /tmp/tablelane-web.log 2>&1 &
+          for attempt in $(seq 1 30); do curl -fsS http://localhost:3000 > /dev/null && break || sleep 2; done
+          npm run test:e2e
+        env:
+          PLAYWRIGHT_EXTERNAL_SERVER: '1'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: browser-report
+          path: |
+            playwright-report
+            artifacts
+            test-results
