@@ -55,7 +55,9 @@ test('customer can customize a meal checkout with promo and cancel with history'
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await page.getByLabel('Delivery address').fill('House 12, Road 46, Gulshan 2, Dhaka');
+  await page
+    .getByRole('textbox', { name: 'Delivery address', exact: true })
+    .fill('House 12, Road 46, Gulshan 2, Dhaka');
   await page.getByLabel('Promo code').fill('HELLO15');
   await page.getByRole('button', { name: 'Place my order' }).click();
   await expect(page).toHaveURL(/\/orders\/.+\?placed=1/);

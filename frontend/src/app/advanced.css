@@ -1,6 +1,29 @@
 .customer-header nav {
   flex-wrap: wrap;
 }
+.breadcrumb {
+  min-width: 0;
+  flex: 1;
+}
+.breadcrumb strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-actions {
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .breadcrumb > span {
+    display: none;
+  }
+  .topbar {
+    gap: 12px;
+  }
+  .topbar-actions {
+    gap: 10px;
+  }
+}
 .advanced-nav {
   margin-top: 20px;
 }
