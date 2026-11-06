@@ -23,8 +23,9 @@ export class Orders {
   async create(actor:Actor,body:unknown) {
     const data=parse(checkoutSchema,body);
     if(data.channel==='DINE_IN') await scope(this.db,actor,data.restaurantId,['WAITER','CASHIER','MANAGER','RESTAURANT_OWNER']);
-    const otp=String(randomInt(100000,1000000));
+    const otp=String(randomInt(100000,1000000)); let created=false;
     const result=await this.db.atomic(async tx=>{
+      created=false;
       const existing=await tx.order.findUnique({where:{idempotencyKey:data.idempotencyKey},include:orderInclude});
       if(existing) { if(existing.customerId!==actor.id) throw new ConflictException(); return existing; }
       const restaurant=required(await tx.restaurant.findUnique({where:{id:data.restaurantId}}));
@@ -55,11 +56,12 @@ export class Orders {
       const order=await tx.order.create({data:{restaurantId:restaurant.id,customerId:actor.id,channel:data.channel,tableCheckId:data.tableCheckId,deliveryAddress:data.deliveryAddress,dropLat:data.dropLat,dropLng:data.dropLng,notes:data.notes,idempotencyKey:data.idempotencyKey,otpHash:data.channel==='DELIVERY'?await hash(otp,10):null,...price(goods,data.channel,restaurant.deliveryFeeMinor,discount,data.tipMinor),lines:{create:lines as unknown as Prisma.OrderLineCreateWithoutOrderInput[]},history:{create:{toStatus:'PLACED',byUserId:actor.id}}}});
       await tx.payment.create({data:{orderId:order.id,provider:data.channel==='DINE_IN'?'COUNTER':data.paymentMethod,amountMinor:order.grandMinor,idempotencyKey:`order:${data.idempotencyKey}`}});
       if(restaurant.autoAccept || data.channel==='DINE_IN') { await transitionTx(tx,order,'ACCEPTED',actor.id); await this.kitchen.create(tx,order.id); }
+      created=true;
       return required(await tx.order.findUnique({where:{id:order.id},include:orderInclude}));
     });
     // OTP is returned only to the placing customer, and never included in rider payloads.
     this.events.order(result,{id:result.id,status:result.status});
-    return {...this.safe(result,actor),...(result.channel==='DELIVERY'&&result.placedAt.getTime()>Date.now()-5000?{deliveryOtp:otp}:{})};
+    return {...this.safe(result,actor),...(result.channel==='DELIVERY'&&created?{deliveryOtp:otp}:{})};
   }
   safe<T extends {otpHash?:string|null;customerId:string;dropLat?:number|null;dropLng?:number|null}>(order:T,actor:Actor) { const {otpHash,...safe}=order; return safe; }
   async transition(actor:Actor,orderId:string,body:unknown) {

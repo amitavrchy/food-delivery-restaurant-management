@@ -15,7 +15,7 @@ export class DispatchService {
     if(!order||order.channel!=='DELIVERY'||!['READY','ASSIGNING_RIDER'].includes(order.status)||order.riderId) return;
     if(order.offers.some(o=>o.status==='SENT'&&o.expiresAt>new Date())) return;
     const profiles=await this.db.riderProfile.findMany({where:{status:'ONLINE',verified:true,lastPingAt:{gte:new Date(Date.now()-300000)}},include:{orders:{where:{status:{notIn:['DELIVERED','CANCELLED']}},select:{id:true}}}});
-    const tried=new Set(order.offers.map(o=>o.riderId));
+    const tried=new Set(order.offers.filter(o=>o.expiresAt.getTime()>Date.now()-120000).map(o=>o.riderId));
     let candidates:ReturnType<typeof rankRiders>=[];
     for(let attempt=0;attempt<4&&!candidates.length;attempt++) candidates=rankRiders(profiles.filter(r=>!tried.has(r.userId)).map(r=>({...r,active:r.orders.length})),order.restaurant,expandedRadius(Number(process.env.DISPATCH_RADIUS_KM||5),attempt));
     if(!candidates.length) { this.events.emit(`restaurant:${order.restaurantId}:orders`,'dispatch.alert',{orderId,message:'No rider available. Dispatch will retry.'}); return; }
@@ -34,7 +34,7 @@ export class DispatchService {
       if(offer.status!=='SENT'||offer.expiresAt<=new Date()) throw new ConflictException('This offer expired.');
       const profile=required(await tx.riderProfile.findUnique({where:{userId}}));
       const active=await tx.order.count({where:{riderId:userId,status:{notIn:['DELIVERED','CANCELLED']}}});
-      if(profile.status!=='ONLINE'||active>=profile.capacity) throw new ConflictException('You have reached delivery capacity.');
+      if(!profile.verified||profile.status!=='ONLINE'||active>=profile.capacity) throw new ConflictException('You are offline, unverified or at delivery capacity.');
       const changed=await tx.order.updateMany({where:{id:offer.orderId,riderId:null,status:'ASSIGNING_RIDER'},data:{riderId:userId}});
       if(changed.count!==1) throw new ConflictException('Another rider already accepted this order.');
       await tx.riderOffer.updateMany({where:{orderId:offer.orderId,status:'SENT'},data:{status:'REJECTED'}});
@@ -61,7 +61,11 @@ export class RiderController {
     await this.cache.redis.geoadd('riders',data.lng,data.lat,req.user.id);
     await this.db.riderLocationPing.create({data:{riderId:req.user.id,...data}});
     const active=await this.db.order.findMany({where:{riderId:req.user.id,status:{in:['ASSIGNING_RIDER','PICKED_UP','ARRIVING']}}});
-    for(const order of active) this.events.emit(`order:${order.id}`,'rider.location',{orderId:order.id,...data,at:new Date().toISOString()});
+    for(const order of active) {
+      const payload={orderId:order.id,...data,at:new Date().toISOString()};
+      this.events.emit(`user:${order.customerId}`,'rider.location',payload);
+      this.events.emit(`restaurant:${order.restaurantId}:orders`,'rider.location',payload);
+    }
     return {ok:true};
   }
   @Post('orders/:id/emergency') async emergency(@Req() req:Authed,@Param('id') orderId:string,@Body() body:unknown) {
