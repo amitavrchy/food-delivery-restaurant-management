@@ -142,11 +142,11 @@ test('rider and platform administrator have usable workspaces', async ({ browser
     ['Rider', '/rider', /Ready when you are/],
     ['Admin', '/admin', 'A little oversight. A lot of trust.'],
   ] as const) {
-    const context = await browser.newContext();
+    const context = await browser.newContext({ baseURL: test.info().project.use.baseURL });
     const page = await context.newPage();
-    await page.goto('http://localhost:3000/login');
+    await page.goto('/login');
     await page.getByRole('button', { name: role, exact: true }).click();
-    await expect(page).toHaveURL(`http://localhost:3000${path}`);
+    await expect(page).toHaveURL(path);
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
     await expect(page.locator('.error-box, .toast.error')).toHaveCount(0);
     await page.screenshot({

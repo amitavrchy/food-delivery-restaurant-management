@@ -7,7 +7,7 @@ export default defineConfig({
   expect: { timeout: 10000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     channel: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
