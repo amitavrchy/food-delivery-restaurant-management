@@ -16,12 +16,23 @@ model User {
   orders Order[]
   rider RiderProfile?
   shifts Shift[]
+  organizations Organization[]
+  addresses CustomerAddress[]
+  favorites FavoriteRestaurant[]
+  loyaltyEntries LoyaltyEntry[]
+  notifications Notification[]
+  reservations Reservation[]
+  scheduledShifts ScheduledShift[]
+  leaveRequests LeaveRequest[]
+  supportTickets SupportTicket[]
+  supportMessages SupportMessage[]
 }
 model UserRestaurantRole {
   id String @id @default(cuid())
   userId String
   restaurantId String
   role String
+  hourlyRateMinor Int @default(0)
   user User @relation(fields:[userId], references:[id])
   restaurant Restaurant @relation(fields:[restaurantId], references:[id])
   @@unique([userId,restaurantId,role])
@@ -42,6 +53,24 @@ model Restaurant {
   isOnline Boolean @default(true)
   commissionBps Int @default(1500)
   deliveryFeeMinor Int @default(4900)
+  organizationId String?
+  taxBps Int @default(500)
+  serviceBps Int @default(500)
+  minOrderMinor Int @default(0)
+  deliveryRadiusKm Float @default(15)
+  loyaltyEnabled Boolean @default(true)
+  openingHours Json @default("{}")
+  organization Organization? @relation(fields:[organizationId],references:[id])
+  favorites FavoriteRestaurant[]
+  reservations Reservation[]
+  waitlist WaitlistEntry[]
+  suppliers Supplier[]
+  purchaseOrders PurchaseOrder[]
+  invites StaffInvite[]
+  plannedShifts ScheduledShift[]
+  leaveRequests LeaveRequest[]
+  promotions PromoCode[]
+  supportTickets SupportTicket[]
   categories MenuCategory[]
   items MenuItem[]
   stations PrepStation[]
@@ -73,6 +102,10 @@ model MenuItem {
   prepMinutes Int @default(15)
   availableFrom Int @default(0)
   availableUntil Int @default(24)
+  dietaryTags String[] @default([])
+  allergens String[] @default([])
+  energyKcal Int?
+  featured Boolean @default(false)
   restaurant Restaurant @relation(fields:[restaurantId],references:[id])
   category MenuCategory @relation(fields:[categoryId],references:[id])
   station PrepStation @relation(fields:[stationId],references:[id])
@@ -118,6 +151,9 @@ model InventoryItem {
   restaurant Restaurant @relation(fields:[restaurantId],references:[id])
   components RecipeComponent[]
   movements StockMovement[]
+  purchaseLines PurchaseOrderLine[]
+  transfersOut StockTransfer[] @relation("StockFrom")
+  transfersIn StockTransfer[] @relation("StockTo")
 }
 model StockMovement {
   id String @id @default(cuid())
@@ -146,6 +182,7 @@ model DiningTable {
   posY Float @default(0)
   restaurant Restaurant @relation(fields:[restaurantId],references:[id])
   checks TableCheck[]
+  reservations Reservation[]
   @@unique([restaurantId,code])
 }
 model TableCheck {
@@ -194,6 +231,13 @@ model Order {
   otpHash String?
   idempotencyKey String @unique
   placedAt DateTime @default(now())
+  scheduledFor DateTime?
+  loyaltyRedeemed Int @default(0)
+  loyaltyEarned Int @default(0)
+  loyaltyEntries LoyaltyEntry[]
+  promoRedemption PromoRedemption?
+  supportTickets SupportTicket[]
+  proofs DeliveryProof[]
   restaurant Restaurant @relation(fields:[restaurantId],references:[id])
   customer User @relation(fields:[customerId],references:[id])
   rider RiderProfile? @relation(fields:[riderId],references:[userId])
@@ -310,12 +354,19 @@ model PromoCode {
   maxDiscountMinor Int @default(100000)
   active Boolean @default(true)
   expiresAt DateTime?
+  startsAt DateTime?
+  restaurantId String?
+  maxRedemptions Int @default(10000)
+  maxPerCustomer Int @default(1)
+  restaurant Restaurant? @relation(fields:[restaurantId],references:[id])
+  redemptions PromoRedemption[]
 }
 model Rating {
   id String @id @default(cuid())
   orderId String @unique
   stars Int
   comment String
+  riderStars Int?
   createdAt DateTime @default(now())
   order Order @relation(fields:[orderId],references:[id])
 }
@@ -326,4 +377,233 @@ model AuditLog {
   entityId String
   detail Json
   createdAt DateTime @default(now())
+}
+
+model Organization {
+  id String @id @default(cuid())
+  name String
+  ownerId String
+  createdAt DateTime @default(now())
+  owner User @relation(fields:[ownerId],references:[id])
+  restaurants Restaurant[]
+}
+model CustomerAddress {
+  id String @id @default(cuid())
+  userId String
+  label String
+  address String
+  phone String
+  lat Float?
+  lng Float?
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id])
+  @@index([userId])
+}
+model FavoriteRestaurant {
+  id String @id @default(cuid())
+  userId String
+  restaurantId String
+  user User @relation(fields:[userId],references:[id])
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  @@unique([userId,restaurantId])
+}
+model LoyaltyEntry {
+  id String @id @default(cuid())
+  userId String
+  orderId String?
+  points Int
+  kind String
+  reason String
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id])
+  order Order? @relation(fields:[orderId],references:[id],onDelete:Cascade)
+  @@unique([orderId,kind])
+  @@index([userId,createdAt])
+}
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  kind String
+  title String
+  body String
+  href String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id])
+  @@index([userId,readAt,createdAt])
+}
+model Reservation {
+  id String @id @default(cuid())
+  restaurantId String
+  userId String?
+  tableId String?
+  guestName String
+  phone String
+  partySize Int
+  startsAt DateTime
+  endsAt DateTime
+  status String @default("BOOKED")
+  notes String @default("")
+  createdAt DateTime @default(now())
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  user User? @relation(fields:[userId],references:[id])
+  table DiningTable? @relation(fields:[tableId],references:[id])
+  @@index([restaurantId,startsAt,status])
+}
+model WaitlistEntry {
+  id String @id @default(cuid())
+  restaurantId String
+  guestName String
+  phone String
+  partySize Int
+  quotedMinutes Int @default(15)
+  status String @default("WAITING")
+  notes String @default("")
+  createdAt DateTime @default(now())
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  @@index([restaurantId,status,createdAt])
+}
+model Supplier {
+  id String @id @default(cuid())
+  restaurantId String
+  name String
+  email String?
+  phone String
+  leadDays Int @default(1)
+  active Boolean @default(true)
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  orders PurchaseOrder[]
+}
+model PurchaseOrder {
+  id String @id @default(cuid())
+  restaurantId String
+  supplierId String
+  status String @default("DRAFT")
+  expectedAt DateTime?
+  notes String @default("")
+  createdById String
+  createdAt DateTime @default(now())
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  supplier Supplier @relation(fields:[supplierId],references:[id])
+  lines PurchaseOrderLine[]
+  receipts StockReceipt[]
+}
+model PurchaseOrderLine {
+  id String @id @default(cuid())
+  purchaseOrderId String
+  inventoryItemId String
+  orderedQty Decimal @db.Decimal(14,3)
+  receivedQty Decimal @default(0) @db.Decimal(14,3)
+  unitCostMinor Int
+  order PurchaseOrder @relation(fields:[purchaseOrderId],references:[id])
+  ingredient InventoryItem @relation(fields:[inventoryItemId],references:[id])
+}
+model StockReceipt {
+  id String @id @default(cuid())
+  purchaseOrderId String
+  idempotencyKey String @unique
+  invoiceReference String
+  lines Json
+  byUserId String
+  createdAt DateTime @default(now())
+  order PurchaseOrder @relation(fields:[purchaseOrderId],references:[id])
+}
+model StockTransfer {
+  id String @id @default(cuid())
+  sourceItemId String
+  targetItemId String
+  qty Decimal @db.Decimal(14,3)
+  reason String
+  byUserId String
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+  source InventoryItem @relation("StockFrom",fields:[sourceItemId],references:[id])
+  target InventoryItem @relation("StockTo",fields:[targetItemId],references:[id])
+}
+model StaffInvite {
+  id String @id @default(cuid())
+  restaurantId String
+  email String
+  role String
+  tokenHash String @unique
+  expiresAt DateTime
+  acceptedAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+}
+model ScheduledShift {
+  id String @id @default(cuid())
+  restaurantId String
+  userId String
+  startsAt DateTime
+  endsAt DateTime
+  role String
+  hourlyRateMinor Int @default(0)
+  notes String @default("")
+  status String @default("PLANNED")
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  user User @relation(fields:[userId],references:[id])
+  @@index([restaurantId,startsAt])
+}
+model LeaveRequest {
+  id String @id @default(cuid())
+  restaurantId String
+  userId String
+  startsAt DateTime
+  endsAt DateTime
+  reason String
+  status String @default("PENDING")
+  reviewedById String?
+  createdAt DateTime @default(now())
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  user User @relation(fields:[userId],references:[id])
+}
+model PromoRedemption {
+  id String @id @default(cuid())
+  promoId String
+  orderId String @unique
+  customerId String
+  discountMinor Int
+  createdAt DateTime @default(now())
+  promo PromoCode @relation(fields:[promoId],references:[id])
+  order Order @relation(fields:[orderId],references:[id],onDelete:Cascade)
+  @@index([promoId,customerId])
+}
+model SupportTicket {
+  id String @id @default(cuid())
+  restaurantId String
+  orderId String
+  userId String
+  category String
+  subject String
+  status String @default("OPEN")
+  refundMinor Int @default(0)
+  refundReference String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  restaurant Restaurant @relation(fields:[restaurantId],references:[id])
+  order Order @relation(fields:[orderId],references:[id],onDelete:Cascade)
+  user User @relation(fields:[userId],references:[id])
+  messages SupportMessage[]
+}
+model SupportMessage {
+  id String @id @default(cuid())
+  ticketId String
+  authorId String
+  body String
+  createdAt DateTime @default(now())
+  ticket SupportTicket @relation(fields:[ticketId],references:[id],onDelete:Cascade)
+  author User @relation(fields:[authorId],references:[id])
+}
+model DeliveryProof {
+  id String @id @default(cuid())
+  orderId String
+  riderId String
+  storageKey String
+  mimeType String
+  sha256 String
+  createdAt DateTime @default(now())
+  order Order @relation(fields:[orderId],references:[id],onDelete:Cascade)
 }
