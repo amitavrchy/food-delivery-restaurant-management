@@ -38,8 +38,10 @@ export class PaymentsController {
       const payment = required(await tx.payment.findUnique({ where: { id: data.paymentId } }));
       if (payment.amountMinor !== data.amountMinor)
         throw new ConflictException('Payment amount mismatch.');
-      if (['COD', 'COUNTER'].includes(payment.provider))
-        throw new ConflictException('Offline payments cannot be captured by webhook.');
+      if (['COD', 'COUNTER', 'STRIPE'].includes(payment.provider))
+        throw new ConflictException(
+          'This payment requires its own settlement or provider-specific verified webhook.',
+        );
       if (payment.status === data.status) return { ok: true };
       const allowed: Record<string, string[]> = {
         PENDING: ['CAPTURED', 'FAILED'],

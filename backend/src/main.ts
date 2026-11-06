@@ -17,7 +17,7 @@ async function bootstrap() {
       process.env.MANAGER_PIN === '4729')
   )
     throw new Error('Configure production secrets and disable demo access.');
-  const app = await NestFactory.create(AppModule, { bodyParser: true });
+  const app = await NestFactory.create(AppModule, { bodyParser: true, rawBody: true });
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new DatabaseErrors());
   app.enableShutdownHooks();

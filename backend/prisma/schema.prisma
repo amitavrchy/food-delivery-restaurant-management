@@ -223,6 +223,7 @@ model Order {
   serviceMinor Int @default(0)
   grandMinor Int
   deliveryAddress String?
+  deliveryPhone String?
   dropLat Float?
   dropLng Float?
   notes String @default("")
@@ -332,9 +333,29 @@ model Payment {
   status String @default("PENDING")
   amountMinor Int
   providerReference String? @unique
+  checkoutUrl String?
+  paymentIntentId String?
+  refunds PaymentRefund[]
   idempotencyKey String @unique
   createdAt DateTime @default(now())
   order Order @relation(fields:[orderId],references:[id])
+}
+model PaymentRefund {
+  id String @id @default(cuid())
+  paymentId String
+  amountMinor Int
+  status String @default("REQUESTED")
+  providerReference String? @unique
+  idempotencyKey String @unique
+  reason String
+  requestedById String
+  createdAt DateTime @default(now())
+  payment Payment @relation(fields:[paymentId],references:[id],onDelete:Cascade)
+}
+model PaymentEvent {
+  id String @id
+  provider String
+  createdAt DateTime @default(now())
 }
 model Shift {
   id String @id @default(cuid())
