@@ -24,18 +24,32 @@ import { Events } from '../realtime';
 import { price } from '../domain/pricing';
 import { KitchenService } from './kitchen';
 import { transitionTx } from './transitions';
+import { haversine } from '../domain/dispatch';
+import { stripeEnabled } from './stripe';
 export const orderInclude = {
   restaurant: true,
   lines: true,
   history: { orderBy: { at: 'asc' as const } },
   rider: { select: { userId: true, vehicle: true, user: { select: { name: true } } } },
   rating: true,
-  payments: true,
+  payments: {
+    select: {
+      id: true,
+      provider: true,
+      status: true,
+      amountMinor: true,
+      createdAt: true,
+      refunds: { select: { id: true, amountMinor: true, status: true, createdAt: true } },
+    },
+  },
+  proofs: { select: { id: true, createdAt: true, mimeType: true } },
 };
 export const checkoutSchema = z.object({
   restaurantId: id,
   channel: z.enum(['DELIVERY', 'TAKEAWAY', 'DINE_IN']),
   tableCheckId: id.optional(),
+  scheduledFor: z.iso.datetime({ offset: true }).optional(),
+  redeemPoints: z.number().int().min(0).max(100000).default(0),
   lines: z
     .array(
       z.object({
@@ -49,12 +63,13 @@ export const checkoutSchema = z.object({
     .min(1)
     .max(50),
   deliveryAddress: z.string().trim().min(8).max(500).optional(),
+  deliveryPhone: z.string().trim().min(7).max(25).optional(),
   dropLat: z.number().min(-90).max(90).optional(),
   dropLng: z.number().min(-180).max(180).optional(),
   promoCode: z.string().max(30).optional(),
   tipMinor: money.default(0),
   notes: z.string().max(500).default(''),
-  paymentMethod: z.enum(['COD', 'COUNTER']).default('COD'),
+  paymentMethod: z.enum(['COD', 'COUNTER', 'STRIPE']).default('COD'),
   idempotencyKey: key,
 });
 @Injectable()
@@ -74,6 +89,10 @@ export class Orders {
   }
   async create(actor: Actor, body: unknown) {
     const data = parse(checkoutSchema, body);
+    if (data.paymentMethod === 'STRIPE' && !stripeEnabled())
+      throw new BadRequestException('Card payment is not configured.');
+    if (data.paymentMethod === 'STRIPE' && data.channel === 'DINE_IN')
+      throw new BadRequestException('Settle dine-in cards using the external counter terminal.');
     if (data.channel === 'DINE_IN')
       await scope(this.db, actor, data.restaurantId, [
         'WAITER',
@@ -100,6 +119,46 @@ export class Orders {
         throw new ConflictException('This restaurant has paused delivery orders.');
       if (data.channel === 'DELIVERY' && !data.deliveryAddress)
         throw new BadRequestException('A delivery address is required.');
+      if ((data.dropLat == null) !== (data.dropLng == null))
+        throw new BadRequestException('Provide both delivery coordinates.');
+      if (
+        data.channel === 'DELIVERY' &&
+        data.dropLat != null &&
+        data.dropLng != null &&
+        haversine(restaurant, { lat: data.dropLat, lng: data.dropLng }) >
+          restaurant.deliveryRadiusKm
+      )
+        throw new ConflictException('This address is outside the restaurant’s delivery area.');
+      const scheduledFor = data.scheduledFor ? new Date(data.scheduledFor) : null;
+      if (
+        scheduledFor &&
+        (data.channel === 'DINE_IN' ||
+          scheduledFor.getTime() < Date.now() + 30 * 60000 ||
+          scheduledFor.getTime() > Date.now() + 7 * 86400000)
+      )
+        throw new BadRequestException(
+          'Schedule delivery or takeaway between 30 minutes and seven days ahead.',
+        );
+      const requestedTime = scheduledFor || new Date();
+      const day = new Intl.DateTimeFormat('en', { weekday: 'short', timeZone: restaurant.timezone })
+        .format(requestedTime)
+        .toUpperCase();
+      const hour = Number(
+        new Intl.DateTimeFormat('en', {
+          hour: 'numeric',
+          hourCycle: 'h23',
+          timeZone: restaurant.timezone,
+        }).format(requestedTime),
+      );
+      const window = (
+        restaurant.openingHours as Record<string, { open: number; close: number; closed: boolean }>
+      )[day];
+      if (
+        data.channel !== 'DINE_IN' &&
+        window &&
+        (window.closed || hour < window.open || hour >= window.close)
+      )
+        throw new ConflictException('The restaurant is closed at the requested time.');
       if (data.channel === 'DINE_IN') {
         if (!data.tableCheckId) throw new BadRequestException('Select an open table check.');
         required(
@@ -119,7 +178,7 @@ export class Orders {
           timeZone: restaurant.timezone,
           hour: 'numeric',
           hourCycle: 'h23',
-        }).format(new Date()),
+        }).format(scheduledFor || new Date()),
       );
       for (const line of data.lines) {
         const item = required(
@@ -163,7 +222,10 @@ export class Orders {
         });
       }
       const goods = lines.reduce((s, l) => s + l.qty * l.unitPriceMinor, 0);
+      if (data.channel === 'DELIVERY' && goods < restaurant.minOrderMinor)
+        throw new ConflictException('This cart is below the restaurant’s minimum delivery order.');
       let discount = 0;
+      let appliedPromo: { id: string; discount: number } | null = null;
       if (data.promoCode) {
         const promo = await tx.promoCode.findUnique({
           where: { code: data.promoCode.toUpperCase() },
@@ -172,13 +234,39 @@ export class Orders {
           !promo ||
           !promo.active ||
           (promo.expiresAt && promo.expiresAt < new Date()) ||
+          (promo.startsAt && promo.startsAt > new Date()) ||
+          (promo.restaurantId && promo.restaurantId !== restaurant.id) ||
           goods < promo.minOrderMinor
         )
           throw new BadRequestException('Promo is invalid, expired or below its minimum order.');
+        if (
+          (await tx.promoRedemption.count({ where: { promoId: promo.id } })) >=
+            promo.maxRedemptions ||
+          (await tx.promoRedemption.count({
+            where: { promoId: promo.id, customerId: actor.id },
+          })) >= promo.maxPerCustomer
+        )
+          throw new ConflictException('This promotion has reached its redemption limit.');
         discount = Math.min(
           promo.maxDiscountMinor,
           promo.type === 'PERCENT' ? Math.round((goods * promo.value) / 100) : promo.value,
         );
+        appliedPromo = { id: promo.id, discount };
+      }
+      if (data.redeemPoints) {
+        if (!restaurant.loyaltyEnabled)
+          throw new ConflictException('Rewards are not enabled at this restaurant.');
+        const points =
+          (await tx.loyaltyEntry.aggregate({ where: { userId: actor.id }, _sum: { points: true } }))
+            ._sum.points || 0;
+        if (
+          data.redeemPoints > points ||
+          data.redeemPoints * 100 > goods - Math.min(goods, discount)
+        )
+          throw new ConflictException(
+            'Not enough reward points or food balance for this redemption.',
+          );
+        discount += data.redeemPoints * 100;
       }
       const order = await tx.order.create({
         data: {
@@ -187,15 +275,73 @@ export class Orders {
           channel: data.channel,
           tableCheckId: data.tableCheckId,
           deliveryAddress: data.deliveryAddress,
+          deliveryPhone: data.deliveryPhone,
           dropLat: data.dropLat,
           dropLng: data.dropLng,
           notes: data.notes,
+          scheduledFor,
+          loyaltyRedeemed: data.redeemPoints,
           idempotencyKey: data.idempotencyKey,
           otpHash: data.channel === 'DELIVERY' ? await hash(otp, 10) : null,
-          ...price(goods, data.channel, restaurant.deliveryFeeMinor, discount, data.tipMinor),
+          ...price(
+            goods,
+            data.channel,
+            restaurant.deliveryFeeMinor,
+            discount,
+            data.tipMinor,
+            restaurant.taxBps,
+            restaurant.serviceBps,
+          ),
           lines: { create: lines as unknown as Prisma.OrderLineCreateWithoutOrderInput[] },
           history: { create: { toStatus: 'PLACED', byUserId: actor.id } },
         },
+      });
+      if (appliedPromo)
+        await tx.promoRedemption.create({
+          data: {
+            promoId: appliedPromo.id,
+            orderId: order.id,
+            customerId: actor.id,
+            discountMinor: appliedPromo.discount,
+          },
+        });
+      if (data.redeemPoints)
+        await tx.loyaltyEntry.create({
+          data: {
+            userId: actor.id,
+            orderId: order.id,
+            kind: 'REDEEM',
+            points: -data.redeemPoints,
+            reason: 'Reward points applied at checkout',
+          },
+        });
+      await tx.notification.create({
+        data: {
+          userId: actor.id,
+          kind: 'ORDER',
+          title: `Order #${order.number} placed`,
+          body: scheduledFor
+            ? 'Your scheduled order is saved.'
+            : 'Your order has been sent to the restaurant.',
+          href: `/orders/${order.id}`,
+        },
+      });
+      const recipients = await tx.userRestaurantRole.findMany({
+        where: { restaurantId: restaurant.id, role: { in: ['RESTAURANT_OWNER', 'MANAGER'] } },
+        select: { userId: true },
+      });
+      await tx.notification.createMany({
+        data: [...new Set(recipients.map((r) => r.userId))]
+          .filter((userId) => userId !== actor.id)
+          .map((userId) => ({
+            userId,
+            kind: 'ORDER',
+            title: `Incoming order #${order.number}`,
+            body: scheduledFor
+              ? 'A scheduled order is waiting.'
+              : 'A new order needs your kitchen.',
+            href: '/restaurant/orders',
+          })),
       });
       await tx.payment.create({
         data: {
@@ -205,7 +351,11 @@ export class Orders {
           idempotencyKey: `order:${data.idempotencyKey}`,
         },
       });
-      if (restaurant.autoAccept || data.channel === 'DINE_IN') {
+      if (
+        data.paymentMethod !== 'STRIPE' &&
+        (restaurant.autoAccept || data.channel === 'DINE_IN') &&
+        (!scheduledFor || scheduledFor.getTime() <= Date.now() + 30 * 60000)
+      ) {
         await transitionTx(tx, order, 'ACCEPTED', actor.id);
         await this.kitchen.create(tx, order.id);
       }
@@ -257,6 +407,14 @@ export class Orders {
       body,
     );
     const initial = await this.access(actor, orderId);
+    if (
+      data.status === 'ACCEPTED' &&
+      initial.scheduledFor &&
+      initial.scheduledFor.getTime() > Date.now() + 30 * 60000
+    )
+      throw new ConflictException(
+        'Scheduled orders can enter the kitchen 30 minutes before their requested time.',
+      );
     let restaurant = false;
     if (['PICKED_UP', 'ARRIVING', 'DELIVERED'].includes(data.status)) {
       if (initial.riderId !== actor.id)
@@ -295,6 +453,15 @@ export class Orders {
     }
     await this.db.atomic(async (tx) => {
       const order = required(await tx.order.findUnique({ where: { id: orderId } }));
+      if (
+        data.status === 'ACCEPTED' &&
+        (await tx.payment.count({
+          where: { orderId, provider: 'STRIPE', status: { not: 'CAPTURED' } },
+        }))
+      )
+        throw new ConflictException(
+          'Wait for card payment confirmation before accepting this order.',
+        );
       if (['IN_KITCHEN', 'READY'].includes(data.status)) {
         const unfinished = await tx.kitchenTicket.count({
           where: { orderId, status: { notIn: ['DONE', 'BUMPED', 'VOID'] } },
@@ -394,13 +561,32 @@ export class OrdersController {
     )
       throw new ForbiddenException('Rate your completed orders only.');
     const data = parse(
-      z.object({ stars: z.number().int().min(1).max(5), comment: z.string().trim().max(500) }),
+      z.object({
+        stars: z.number().int().min(1).max(5),
+        comment: z.string().trim().max(500),
+        riderStars: z.number().int().min(1).max(5).optional(),
+      }),
       body,
     );
-    return this.db.rating.upsert({
-      where: { orderId },
-      create: { orderId, ...data },
-      update: data,
+    return this.db.atomic(async (tx) => {
+      if (data.riderStars && !order.riderId)
+        throw new BadRequestException('This order has no delivery rider.');
+      const result = await tx.rating.upsert({
+        where: { orderId },
+        create: { orderId, ...data },
+        update: data,
+      });
+      if (data.riderStars && order.riderId) {
+        const ratings = await tx.rating.aggregate({
+          where: { order: { riderId: order.riderId }, riderStars: { not: null } },
+          _avg: { riderStars: true },
+        });
+        await tx.riderProfile.update({
+          where: { userId: order.riderId },
+          data: { ratingAvg: ratings._avg.riderStars || 5 },
+        });
+      }
+      return result;
     });
   }
 }

@@ -17,8 +17,25 @@ import { AdminController } from './modules/admin';
 import { PaymentsController } from './modules/payments';
 import { HealthController } from './health';
 import { OperationsController } from './modules/operations';
+import { EngagementController, SupportController } from './modules/engagement';
+import { HospitalityController } from './modules/hospitality';
+import { ProcurementController } from './modules/procurement';
+import { EnterpriseController } from './modules/enterprise';
+import { AdvancedPosController } from './modules/advanced-pos';
+import { InsightsController } from './modules/insights';
+import { StripeController } from './modules/stripe';
+import { ProofController } from './modules/proof';
 @Module({
   controllers: [
+    EngagementController,
+    SupportController,
+    HospitalityController,
+    ProcurementController,
+    EnterpriseController,
+    AdvancedPosController,
+    InsightsController,
+    StripeController,
+    ProofController,
     AuthController,
     CatalogController,
     OrdersController,

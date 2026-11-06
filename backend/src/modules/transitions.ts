@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrderTransitionService } from '../domain/order-machine';
+import { loyaltyAfterTransition } from './loyalty';
 export async function transitionTx(
   tx: Prisma.TransactionClient,
   order: { id: string; status: string; channel: string },
@@ -27,5 +28,6 @@ export async function transitionTx(
   await tx.orderStatusHistory.create({
     data: { orderId: order.id, fromStatus: order.status, toStatus: to, byUserId: actorId, reason },
   });
+  await loyaltyAfterTransition(tx, order.id, to);
   return { ...order, status: to };
 }

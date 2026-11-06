@@ -4,6 +4,7 @@ import { Db } from './db';
 import { Cache } from './redis';
 import { DispatchService } from './modules/dispatch';
 import { transitionTx } from './modules/transitions';
+import { KitchenService } from './modules/kitchen';
 @Injectable()
 export class Jobs implements OnModuleInit, OnModuleDestroy {
   private queue!: Queue;
@@ -12,6 +13,7 @@ export class Jobs implements OnModuleInit, OnModuleDestroy {
     @Inject(Db) private db: Db,
     @Inject(Cache) private cache: Cache,
     @Inject(DispatchService) private dispatch: DispatchService,
+    @Inject(KitchenService) private kitchen: KitchenService,
   ) {}
   async onModuleInit() {
     this.queue = new Queue('operations', { connection: this.cache.redis });
@@ -28,6 +30,28 @@ export class Jobs implements OnModuleInit, OnModuleDestroy {
     );
   }
   async sweep() {
+    const scheduled = await this.db.order.findMany({
+      where: {
+        status: 'PLACED',
+        scheduledFor: { lte: new Date(Date.now() + 30 * 60000), gt: new Date() },
+        restaurant: { autoAccept: true },
+      },
+      take: 100,
+    });
+    for (const order of scheduled)
+      await this.db.atomic(async (tx) => {
+        const fresh = await tx.order.findUnique({ where: { id: order.id } });
+        if (
+          !fresh ||
+          fresh.status !== 'PLACED' ||
+          (await tx.payment.count({
+            where: { orderId: order.id, provider: 'STRIPE', status: { not: 'CAPTURED' } },
+          }))
+        )
+          return;
+        await transitionTx(tx, fresh, 'ACCEPTED', 'system:schedule');
+        await this.kitchen.create(tx, fresh.id);
+      });
     await this.db.riderOffer.updateMany({
       where: { status: 'SENT', expiresAt: { lte: new Date() } },
       data: { status: 'EXPIRED' },
@@ -42,7 +66,24 @@ export class Jobs implements OnModuleInit, OnModuleDestroy {
     });
     for (const order of pending) await this.dispatch.offer(order.id);
     const stale = await this.db.order.findMany({
-      where: { status: 'PLACED', placedAt: { lt: new Date(Date.now() - 900000) } },
+      where: {
+        status: 'PLACED',
+        placedAt: { lt: new Date(Date.now() - 900000) },
+        AND: [
+          {
+            OR: [
+              { scheduledFor: null },
+              { scheduledFor: { lt: new Date(Date.now() + 15 * 60000) } },
+            ],
+          },
+          {
+            OR: [
+              { payments: { none: { provider: 'STRIPE', status: 'PENDING' } } },
+              { placedAt: { lt: new Date(Date.now() - 31 * 60000) } },
+            ],
+          },
+        ],
+      },
       take: 100,
     });
     for (const order of stale)

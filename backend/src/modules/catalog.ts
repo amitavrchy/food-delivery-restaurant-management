@@ -6,6 +6,13 @@ import { Cache } from '../redis';
 import { id, managers, money, parse, required, scope } from '../common';
 import { haversine, estimateMinutes } from '../domain/dispatch';
 const itemSchema = z.object({
+  dietaryTags: z
+    .array(z.enum(['VEGAN', 'VEGETARIAN', 'GLUTEN_FREE', 'SPICY', 'HIGH_PROTEIN']))
+    .max(5)
+    .default([]),
+  allergens: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
+  energyKcal: z.number().int().min(0).max(5000).nullable().optional(),
+  featured: z.boolean().default(false),
   name: z.string().trim().min(2).max(100),
   description: z.string().max(500),
   image: z.string().max(500),
@@ -86,6 +93,26 @@ export class CatalogController {
         autoAccept: z.boolean().optional(),
         name: z.string().min(2).max(100).optional(),
         deliveryFeeMinor: money.optional(),
+        taxBps: z.number().int().min(0).max(3000).optional(),
+        serviceBps: z.number().int().min(0).max(3000).optional(),
+        minOrderMinor: money.optional(),
+        deliveryRadiusKm: z.number().positive().max(100).optional(),
+        loyaltyEnabled: z.boolean().optional(),
+        openingHours: z
+          .record(
+            z.enum(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']),
+            z
+              .object({
+                open: z.number().int().min(0).max(23),
+                close: z.number().int().min(1).max(24),
+                closed: z.boolean(),
+              })
+              .refine(
+                (h) => h.closed || h.close > h.open,
+                'Closing hour must be after opening hour.',
+              ),
+          )
+          .optional(),
       }),
       body,
     );
@@ -122,6 +149,8 @@ export class CatalogController {
         .extend({ isAvailable: z.boolean().optional(), archived: z.boolean().optional() }),
       body,
     );
+    for (const field of Object.keys(data))
+      if (!Object.hasOwn(body as object, field)) delete (data as Record<string, unknown>)[field];
     if ((data.availableFrom ?? item.availableFrom) >= (data.availableUntil ?? item.availableUntil))
       throw new (await import('@nestjs/common')).BadRequestException(
         'Available from must be before available until.',

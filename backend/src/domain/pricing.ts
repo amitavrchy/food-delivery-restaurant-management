@@ -4,6 +4,8 @@ export function price(
   deliveryFeeMinor: number,
   discountMinor = 0,
   tipMinor = 0,
+  taxBps = 500,
+  serviceBps = 500,
 ) {
   if (
     ![goodsMinor, deliveryFeeMinor, discountMinor, tipMinor].every(
@@ -13,8 +15,8 @@ export function price(
     throw new Error('Money must be positive integer minor units');
   const discount = Math.min(goodsMinor, discountMinor);
   const taxable = goodsMinor - discount;
-  const taxMinor = Math.round(taxable * 0.05);
-  const serviceMinor = channel === 'DINE_IN' ? Math.round(taxable * 0.05) : 0;
+  const taxMinor = Math.round((taxable * taxBps) / 10000);
+  const serviceMinor = channel === 'DINE_IN' ? Math.round((taxable * serviceBps) / 10000) : 0;
   const delivery = channel === 'DELIVERY' ? deliveryFeeMinor : 0;
   return {
     goodsMinor,
