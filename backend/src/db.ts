@@ -18,8 +18,10 @@ export class Db extends PrismaClient implements OnModuleInit, OnModuleDestroy {
         });
       } catch (e) {
         if (
-          e instanceof Prisma.PrismaClientKnownRequestError &&
-          ['P2034', 'P2028'].includes(e.code)
+          (e instanceof Prisma.PrismaClientKnownRequestError &&
+            ['P2034', 'P2028'].includes(e.code)) ||
+          (e instanceof Prisma.PrismaClientUnknownRequestError &&
+            /40P01|40001|deadlock detected|could not serialize/i.test(e.message))
         ) {
           if (attempt < 4) {
             await new Promise((resolve) => setTimeout(resolve, 40 * 2 ** attempt));

@@ -1,13 +1,18 @@
 import { ArgumentsHost, Catch, ExceptionFilter } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-@Catch(Prisma.PrismaClientKnownRequestError)
+@Catch(Prisma.PrismaClientKnownRequestError, Prisma.PrismaClientUnknownRequestError)
 export class DatabaseErrors implements ExceptionFilter {
-  catch(error: Prisma.PrismaClientKnownRequestError, host: ArgumentsHost) {
+  catch(
+    error: Prisma.PrismaClientKnownRequestError | Prisma.PrismaClientUnknownRequestError,
+    host: ArgumentsHost,
+  ) {
     const response = host.switchToHttp().getResponse();
+    const code = 'code' in error ? error.code : '';
+    const exclusion = /23P01|exclusion constraint/i.test(error.message);
     const status =
-      error.code === 'P2025'
+      code === 'P2025'
         ? 404
-        : ['P2002', 'P2003', 'P2004', 'P2034', 'P2028'].includes(error.code)
+        : exclusion || ['P2002', 'P2003', 'P2004', 'P2034', 'P2028'].includes(code)
           ? 409
           : 500;
     response.status(status).json({

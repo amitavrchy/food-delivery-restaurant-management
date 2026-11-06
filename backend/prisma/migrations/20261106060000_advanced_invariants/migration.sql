@@ -1,0 +1,10 @@
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE UNIQUE INDEX "CustomerAddress_one_default" ON "CustomerAddress"("userId") WHERE "isDefault" = true;
+ALTER TABLE "Reservation" ADD CONSTRAINT "Reservation_valid_window" CHECK ("endsAt" > "startsAt" AND "partySize" > 0);
+ALTER TABLE "Reservation" ADD CONSTRAINT "Reservation_no_table_overlap" EXCLUDE USING GIST ("tableId" WITH =, tsrange("startsAt", "endsAt", '[)') WITH &&) WHERE ("status" IN ('BOOKED', 'SEATED'));
+ALTER TABLE "ScheduledShift" ADD CONSTRAINT "ScheduledShift_valid_window" CHECK ("endsAt" > "startsAt" AND "hourlyRateMinor" >= 0);
+ALTER TABLE "ScheduledShift" ADD CONSTRAINT "ScheduledShift_no_staff_overlap" EXCLUDE USING GIST ("userId" WITH =, tsrange("startsAt", "endsAt", '[)') WITH &&) WHERE ("status" = 'PLANNED');
+ALTER TABLE "PurchaseOrderLine" ADD CONSTRAINT "PurchaseOrderLine_valid_receipts" CHECK ("orderedQty" > 0 AND "receivedQty" >= 0 AND "receivedQty" <= "orderedQty" AND "unitCostMinor" >= 0);
+ALTER TABLE "StockTransfer" ADD CONSTRAINT "StockTransfer_positive" CHECK ("qty" > 0 AND "sourceItemId" <> "targetItemId");
+ALTER TABLE "Restaurant" ADD CONSTRAINT "Restaurant_valid_tax_service" CHECK ("taxBps" BETWEEN 0 AND 3000 AND "serviceBps" BETWEEN 0 AND 3000 AND "minOrderMinor" >= 0 AND "deliveryRadiusKm" > 0);
+ALTER TABLE "Rating" ADD CONSTRAINT "Rating_rider_range" CHECK ("riderStars" IS NULL OR "riderStars" BETWEEN 1 AND 5);
