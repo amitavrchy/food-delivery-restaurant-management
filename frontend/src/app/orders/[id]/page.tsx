@@ -9,8 +9,273 @@ import { TrackingMap } from '@/components/tracking';
 import { useAction, useResource } from '@/lib/hooks';
 import { date, label, money, patch, post, terminal, time } from '@/lib/api';
 import type { Order } from '@/lib/types';
-export default function OrderDetails({params}:{params:Promise<{id:string}>}) {
-  const {id}=use(params);const {user}=useApp();const {data:o,error,loading}=useResource<Order>(user?`orders/${id}`:null);const {run,busy}=useAction();const [otp,setOtp]=useState(''),[stars,setStars]=useState(5),[comment,setComment]=useState(''),[cancel,setCancel]=useState(false),[reason,setReason]=useState('');
-  useEffect(()=>{setOtp(sessionStorage.getItem(`otp:${id}`)||'');},[id]);
-  return <CustomerShell><Access><Link className="text-link" href="/orders"><ArrowLeft size={17}/>All my orders</Link>{loading&&!o?<Loading/>:error?<ErrorState message={error}/>:o&&<><div style={{marginTop:23}}><PageHeading title={`Order #${String(o.number).padStart(4,'0')}`} description={`${o.restaurant.name} · ${date(o.placedAt)} at ${time(o.placedAt)}`}><Badge value={o.status}/></PageHeading></div>{new URLSearchParams(typeof window==='undefined'?'':window.location.search).has('placed')&&<div className="success-box"><Check size={32} color="var(--green)"/><h2>A little deliciousness is on its way.</h2><p>We’ve sent your order to {o.restaurant.name}. Updates will appear here.</p></div>}<div className="tracking-layout"><div className="panel"><div className="panel-body"><div className="tracking-summary"><div><span className="eyebrow">{terminal.includes(o.status)?'ORDER SUMMARY':'YOUR FOOD, IN GOOD HANDS'}</span><strong style={{display:'block'}}>{terminal.includes(o.status)?label(o.status):o.status==='PLACED'?'Waiting for the kitchen':o.status==='ACCEPTED'||o.status==='IN_KITCHEN'?'Something good is cooking':o.status==='READY'?'Fresh and ready to go':o.status==='ASSIGNING_RIDER'?'Finding your delivery partner':'Your meal is on its way'}</strong></div><Clock3 color="var(--green)" size={30}/></div>{o.channel==='DELIVERY'&&<TrackingMap order={o}/ >}{o.deliveryAddress&&<div className="note-box section-gap"><strong>Delivering to</strong><p>{o.deliveryAddress}</p></div>}{o.rider&&<div className="settings-row"><span className="avatar"><Bike size={22}/></span><div style={{flex:1}}><strong>{o.rider.user.name}</strong><p>Your delivery partner · {o.rider.vehicle}</p></div><Badge value={o.status}/></div>}{otp&&!terminal.includes(o.status)&&<div className="delivery-code">Your delivery confirmation code<strong>{otp}</strong><small>Share this with your rider only when your food arrives.</small></div>}<h3 className="section-gap" style={{marginBottom:18}}>Every step, with care</h3><div className="timeline">{o.history.map(h=><div className="timeline-item" key={h.id}><span className="timeline-dot"/><div><strong>{label(h.toStatus)}</strong><div><small>{date(h.at)} · {time(h.at)}</small></div>{h.reason&&<p className="form-hint">{h.reason}</p>}</div></div>)}</div>{['PLACED','ACCEPTED'].includes(o.status)&&<button className="btn danger" onClick={()=>setCancel(true)}>Cancel order</button>}</div></div><div><div className="panel panel-body"><h2>What’s in your bag</h2>{o.lines.map(l=><div className="bill-line" key={l.id}><div><strong>{l.qty} × {l.nameSnapshot}</strong><small>{l.modifiers.map(m=>m.name).join(', ')}</small></div><strong>{money(l.qty*l.unitPriceMinor)}</strong></div>)}<div className="bill-totals"><div><span>Food subtotal</span><span>{money(o.goodsMinor)}</span></div>{o.discountMinor>0&&<div><span>Promo savings</span><span className="green-text">−{money(o.discountMinor)}</span></div>}<div><span>VAT</span><span>{money(o.taxMinor)}</span></div><div><span>Delivery</span><span>{money(o.deliveryFeeMinor)}</span></div>{o.tipMinor>0&&<div><span>Rider tip</span><span>{money(o.tipMinor)}</span></div>}<div className="total"><span>Total</span><strong>{money(o.grandMinor)}</strong></div></div><p className="form-hint">{label(o.channel)} · {o.channel==='DELIVERY'?'Cash on delivery':'Pay at restaurant'}</p>{o.notes&&<div className="note-box section-gap">{o.notes}</div>}</div>{['DELIVERED','COMPLETED','CLOSED'].includes(o.status)&&<form className="panel panel-body section-gap" onSubmit={async e=>{e.preventDefault();await run(()=>post(`orders/${o.id}/rating`,{stars,comment}),'Thanks for sharing a little love.');}}><h2>{o.rating?'Your review':'How was your meal?'}</h2><p className="muted">A little feedback goes a long way.</p><div className="rating-stars">{[1,2,3,4,5].map(n=><button type="button" key={n} className={n<=stars?'active':''} aria-label={`Rate ${n} stars`} onClick={()=>setStars(n)}><Star size={27} fill="currentColor"/></button>)}</div><label>Your thoughts<textarea maxLength={500} value={comment} onChange={e=>setComment(e.target.value)} placeholder={o.rating?.comment||'What made it special?'}/></label><button className="btn primary section-gap" disabled={busy}>Save review</button></form>}</div></div></>}{cancel&&o&&<Modal title="Cancel your order?" onClose={()=>setCancel(false)}><form onSubmit={async e=>{e.preventDefault();const result=await run(()=>patch(`orders/${o.id}/status`,{status:'CANCELLED',reason}),'Order cancelled.');if(result)setCancel(false);}}><label>A short reason<textarea required minLength={3} maxLength={300} value={reason} onChange={e=>setReason(e.target.value)}/></label><div className="form-actions"><button type="button" className="btn secondary" onClick={()=>setCancel(false)}>Keep my order</button><button className="btn danger" disabled={busy}>Confirm cancellation</button></div></form></Modal>}</Access></CustomerShell>;
+export default function OrderDetails({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const { user } = useApp();
+  const { data: o, error, loading } = useResource<Order>(user ? `orders/${id}` : null);
+  const { run, busy } = useAction();
+  const [otp, setOtp] = useState(''),
+    [stars, setStars] = useState(5),
+    [comment, setComment] = useState(''),
+    [cancel, setCancel] = useState(false),
+    [reason, setReason] = useState('');
+  useEffect(() => {
+    setOtp(sessionStorage.getItem(`otp:${id}`) || '');
+  }, [id]);
+  return (
+    <CustomerShell>
+      <Access>
+        <Link className="text-link" href="/orders">
+          <ArrowLeft size={17} />
+          All my orders
+        </Link>
+        {loading && !o ? (
+          <Loading />
+        ) : error ? (
+          <ErrorState message={error} />
+        ) : (
+          o && (
+            <>
+              <div style={{ marginTop: 23 }}>
+                <PageHeading
+                  title={`Order #${String(o.number).padStart(4, '0')}`}
+                  description={`${o.restaurant.name} · ${date(o.placedAt)} at ${time(o.placedAt)}`}
+                >
+                  <Badge value={o.status} />
+                </PageHeading>
+              </div>
+              {new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).has(
+                'placed',
+              ) && (
+                <div className="success-box">
+                  <Check size={32} color="var(--green)" />
+                  <h2>A little deliciousness is on its way.</h2>
+                  <p>We’ve sent your order to {o.restaurant.name}. Updates will appear here.</p>
+                </div>
+              )}
+              <div className="tracking-layout">
+                <div className="panel">
+                  <div className="panel-body">
+                    <div className="tracking-summary">
+                      <div>
+                        <span className="eyebrow">
+                          {terminal.includes(o.status)
+                            ? 'ORDER SUMMARY'
+                            : 'YOUR FOOD, IN GOOD HANDS'}
+                        </span>
+                        <strong style={{ display: 'block' }}>
+                          {terminal.includes(o.status)
+                            ? label(o.status)
+                            : o.status === 'PLACED'
+                              ? 'Waiting for the kitchen'
+                              : o.status === 'ACCEPTED' || o.status === 'IN_KITCHEN'
+                                ? 'Something good is cooking'
+                                : o.status === 'READY'
+                                  ? 'Fresh and ready to go'
+                                  : o.status === 'ASSIGNING_RIDER'
+                                    ? 'Finding your delivery partner'
+                                    : 'Your meal is on its way'}
+                        </strong>
+                      </div>
+                      <Clock3 color="var(--green)" size={30} />
+                    </div>
+                    {o.channel === 'DELIVERY' && <TrackingMap order={o} />}
+                    {o.deliveryAddress && (
+                      <div className="note-box section-gap">
+                        <strong>Delivering to</strong>
+                        <p>{o.deliveryAddress}</p>
+                      </div>
+                    )}
+                    {o.rider && (
+                      <div className="settings-row">
+                        <span className="avatar">
+                          <Bike size={22} />
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <strong>{o.rider.user.name}</strong>
+                          <p>Your delivery partner · {o.rider.vehicle}</p>
+                        </div>
+                        <Badge value={o.status} />
+                      </div>
+                    )}
+                    {otp && !terminal.includes(o.status) && (
+                      <div className="delivery-code">
+                        Your delivery confirmation code<strong>{otp}</strong>
+                        <small>Share this with your rider only when your food arrives.</small>
+                      </div>
+                    )}
+                    {o.channel === 'DELIVERY' && !terminal.includes(o.status) && (
+                      <button
+                        className="text-link section-gap"
+                        disabled={busy}
+                        onClick={async () => {
+                          const result = await run(() =>
+                            post<{ deliveryOtp: string }>(`orders/${o.id}/delivery-code`),
+                          );
+                          if (result) {
+                            setOtp(result.deliveryOtp);
+                            sessionStorage.setItem(`otp:${o.id}`, result.deliveryOtp);
+                          }
+                        }}
+                      >
+                        {otp ? 'Generate a new delivery code' : 'Show my delivery code'}
+                      </button>
+                    )}
+                    <h3 className="section-gap" style={{ marginBottom: 18 }}>
+                      Every step, with care
+                    </h3>
+                    <div className="timeline">
+                      {o.history.map((h) => (
+                        <div className="timeline-item" key={h.id}>
+                          <span className="timeline-dot" />
+                          <div>
+                            <strong>{label(h.toStatus)}</strong>
+                            <div>
+                              <small>
+                                {date(h.at)} · {time(h.at)}
+                              </small>
+                            </div>
+                            {h.reason && <p className="form-hint">{h.reason}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {['PLACED', 'ACCEPTED'].includes(o.status) && (
+                      <button className="btn danger" onClick={() => setCancel(true)}>
+                        Cancel order
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="panel panel-body">
+                    <h2>What’s in your bag</h2>
+                    {o.lines.map((l) => (
+                      <div className="bill-line" key={l.id}>
+                        <div>
+                          <strong>
+                            {l.qty} × {l.nameSnapshot}
+                          </strong>
+                          <small>{l.modifiers.map((m) => m.name).join(', ')}</small>
+                        </div>
+                        <strong>{money(l.qty * l.unitPriceMinor)}</strong>
+                      </div>
+                    ))}
+                    <div className="bill-totals">
+                      <div>
+                        <span>Food subtotal</span>
+                        <span>{money(o.goodsMinor)}</span>
+                      </div>
+                      {o.discountMinor > 0 && (
+                        <div>
+                          <span>Promo savings</span>
+                          <span className="green-text">−{money(o.discountMinor)}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span>VAT</span>
+                        <span>{money(o.taxMinor)}</span>
+                      </div>
+                      <div>
+                        <span>Delivery</span>
+                        <span>{money(o.deliveryFeeMinor)}</span>
+                      </div>
+                      {o.tipMinor > 0 && (
+                        <div>
+                          <span>Rider tip</span>
+                          <span>{money(o.tipMinor)}</span>
+                        </div>
+                      )}
+                      <div className="total">
+                        <span>Total</span>
+                        <strong>{money(o.grandMinor)}</strong>
+                      </div>
+                    </div>
+                    <p className="form-hint">
+                      {label(o.channel)} ·{' '}
+                      {o.channel === 'DELIVERY' ? 'Cash on delivery' : 'Pay at restaurant'}
+                    </p>
+                    {o.notes && <div className="note-box section-gap">{o.notes}</div>}
+                  </div>
+                  {['DELIVERED', 'COMPLETED', 'CLOSED'].includes(o.status) && (
+                    <form
+                      className="panel panel-body section-gap"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        await run(
+                          () => post(`orders/${o.id}/rating`, { stars, comment }),
+                          'Thanks for sharing a little love.',
+                        );
+                      }}
+                    >
+                      <h2>{o.rating ? 'Your review' : 'How was your meal?'}</h2>
+                      <p className="muted">A little feedback goes a long way.</p>
+                      <div className="rating-stars">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button
+                            type="button"
+                            key={n}
+                            className={n <= stars ? 'active' : ''}
+                            aria-label={`Rate ${n} stars`}
+                            onClick={() => setStars(n)}
+                          >
+                            <Star size={27} fill="currentColor" />
+                          </button>
+                        ))}
+                      </div>
+                      <label>
+                        Your thoughts
+                        <textarea
+                          maxLength={500}
+                          value={comment}
+                          onChange={(e) => setComment(e.target.value)}
+                          placeholder={o.rating?.comment || 'What made it special?'}
+                        />
+                      </label>
+                      <button className="btn primary section-gap" disabled={busy}>
+                        Save review
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </>
+          )
+        )}
+        {cancel && o && (
+          <Modal title="Cancel your order?" onClose={() => setCancel(false)}>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const result = await run(
+                  () => patch(`orders/${o.id}/status`, { status: 'CANCELLED', reason }),
+                  'Order cancelled.',
+                );
+                if (result) setCancel(false);
+              }}
+            >
+              <label>
+                A short reason
+                <textarea
+                  required
+                  minLength={3}
+                  maxLength={300}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+              <div className="form-actions">
+                <button type="button" className="btn secondary" onClick={() => setCancel(false)}>
+                  Keep my order
+                </button>
+                <button className="btn danger" disabled={busy}>
+                  Confirm cancellation
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+      </Access>
+    </CustomerShell>
+  );
 }

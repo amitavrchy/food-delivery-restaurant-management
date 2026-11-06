@@ -1,15 +1,217 @@
 'use client';
 import Link from 'next/link';
-import { ArrowRight, ArrowUpRight, CalendarDays, ChefHat, CircleDollarSign, Clock3, ShoppingBag, Sun, UtensilsCrossed } from 'lucide-react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CalendarDays,
+  ChefHat,
+  CircleDollarSign,
+  Clock3,
+  ShoppingBag,
+  Sun,
+  UtensilsCrossed,
+} from 'lucide-react';
 import { useApp } from '@/components/provider';
 import { ErrorState, Loading, Metric, PageHeading } from '@/components/ui';
-import { RevenueChart,ChannelChart } from '@/components/charts';
+import { RevenueChart, ChannelChart } from '@/components/charts';
 import { OrderTable } from '@/components/order-table';
 import { useResource } from '@/lib/hooks';
 import { money, terminal } from '@/lib/api';
-import type { Order,Report } from '@/lib/types';
+import type { Order, Report } from '@/lib/types';
 export default function Overview() {
-  const {user,restaurantId}=useApp();const {data:report,error,loading}=useResource<Report>(user?`reports/${restaurantId}?days=7`:null);const {data:orders}=useResource<Order[]>(user?`orders?restaurantId=${restaurantId}`:null);
-  const active=(orders||[]).filter(o=>!terminal.includes(o.status));
-  return <><PageHeading title={`A good day, ${user?.name.split(' ')[0]||'chef'}.`} description="Here’s what’s happening at your restaurant today."><span className="date-chip"><CalendarDays size={17}/>{new Date().toLocaleDateString('en-GB',{timeZone:'Asia/Dhaka',day:'numeric',month:'short',year:'numeric'})}</span><Link className="btn primary" href="/restaurant/tables"><UtensilsCrossed size={17}/>Open POS</Link></PageHeading><div className="hero-banner"><div><div className="greeting-note" style={{color:'#c4d8b7'}}><Sun size={16}/>A LITTLE CARE IN EVERY ORDER</div><h2>Good service starts with a clear picture.</h2><p>Your kitchen, your tables, your deliveries. Everything in one place.</p></div><Link className="btn" href="/restaurant/orders">Manage orders<ArrowUpRight size={17}/></Link></div>{loading&&!report?<Loading/>:error?<ErrorState message={error}/>:report&&<><div className="metrics"><Metric label="Total revenue" value={money(report.revenueMinor)} detail={<><em>{report.completedOrders} orders</em> · last 7 days</>} icon={<CircleDollarSign size={18}/>}/><Metric label="Total orders" value={report.totalOrders} detail={<>Across all order channels</>} icon={<ShoppingBag size={18}/>}/><Metric label="Active orders" value={active.length} detail={<><em>{active.filter(o=>o.status==='IN_KITCHEN').length} in kitchen</em> · right now</>} icon={<ChefHat size={18}/>}/><Metric label="Average ticket" value={money(report.averageTicketMinor)} detail={<>Per completed order</>} icon={<UtensilsCrossed size={18}/>}/></div><div className="dashboard-grid"><section className="panel"><div className="panel-head"><div><h2>A week of good business</h2><p>Your completed order revenue, day by day</p></div><span className="demo-label">Last 7 days</span></div><RevenueChart report={report}/></section><section className="panel channels-panel"><div className="panel-head"><div><h2>How your guests order</h2><p>A little bit of every kind of service</p></div></div><ChannelChart report={report}/></section></div><section className="panel recent-section"><div className="panel-head"><div><h2>Fresh from your order book</h2><p>The latest orders across your restaurant</p></div><Link className="text-link" href="/restaurant/orders">View all<ArrowRight size={16}/></Link></div><div className="table-spacer"/><OrderTable orders={(orders||[]).slice(0,5)}/></section><div className="dashboard-grid section-gap"><section className="panel"><div className="panel-head"><div><h2>The crowd favourites</h2><p>Dishes your guests keep coming back for</p></div><Link className="text-link" href="/restaurant/menu">View menu<ArrowRight size={16}/></Link></div><div className="panel-body">{report.popular.map((p,i)=><div key={p.name} className="bill-line" style={{alignItems:'center'}}><span className="store-avatar">{String(i+1).padStart(2,'0')}</span><div style={{flex:1}}><strong>{p.name}</strong><small>{p.qty} sold this week</small></div><strong>{money(p.revenueMinor)}</strong></div>)}</div></section><section className="panel"><div className="panel-head"><h2>A little heads-up</h2><span className="store-avatar"><Clock3 size={19}/></span></div><div className="panel-body"><div className="note-box"><strong>{report.lowStock?`${report.lowStock} ingredients could use a top-up`:'Your pantry is looking good'}</strong><p>Keep your kitchen stocked and your service flowing.</p><Link className="text-link section-gap" href="/restaurant/inventory">Check inventory<ArrowRight size={16}/></Link></div><div className="info-pair section-gap"><span>Average kitchen prep</span><strong>{report.avgPrepMinutes?`${report.avgPrepMinutes} min`:'No prep data yet'}</strong></div><div className="info-pair"><span>Food cost</span><strong>{report.foodCostPercent}%</strong></div></div></section></div></>}</>;
+  const { user, restaurantId } = useApp();
+  const router = useRouter();
+  useEffect(() => {
+    if (user?.role === 'KITCHEN') router.replace('/restaurant/kitchen');
+    else if (user && ['CASHIER', 'WAITER'].includes(user.role))
+      router.replace('/restaurant/tables');
+  }, [user, router]);
+  const {
+    data: report,
+    error,
+    loading,
+  } = useResource<Report>(
+    user && ['RESTAURANT_OWNER', 'MANAGER', 'PLATFORM_ADMIN'].includes(user.role)
+      ? `reports/${restaurantId}?days=7`
+      : null,
+  );
+  const { data: orders } = useResource<Order[]>(
+    user ? `orders?restaurantId=${restaurantId}` : null,
+  );
+  const active = (orders || []).filter((o) => !terminal.includes(o.status));
+  return (
+    <>
+      <PageHeading
+        title={`A good day, ${user?.name.split(' ')[0] || 'chef'}.`}
+        description="Here’s what’s happening at your restaurant today."
+      >
+        <span className="date-chip">
+          <CalendarDays size={17} />
+          {new Date().toLocaleDateString('en-GB', {
+            timeZone: 'Asia/Dhaka',
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })}
+        </span>
+        <Link className="btn primary" href="/restaurant/tables">
+          <UtensilsCrossed size={17} />
+          Open POS
+        </Link>
+      </PageHeading>
+      <div className="hero-banner">
+        <div>
+          <div className="greeting-note" style={{ color: '#c4d8b7' }}>
+            <Sun size={16} />A LITTLE CARE IN EVERY ORDER
+          </div>
+          <h2>Good service starts with a clear picture.</h2>
+          <p>Your kitchen, your tables, your deliveries. Everything in one place.</p>
+        </div>
+        <Link className="btn" href="/restaurant/orders">
+          Manage orders
+          <ArrowUpRight size={17} />
+        </Link>
+      </div>
+      {loading && !report ? (
+        <Loading />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : (
+        report && (
+          <>
+            <div className="metrics">
+              <Metric
+                label="Total revenue"
+                value={money(report.revenueMinor)}
+                detail={
+                  <>
+                    <em>{report.completedOrders} orders</em> · last 7 days
+                  </>
+                }
+                icon={<CircleDollarSign size={18} />}
+              />
+              <Metric
+                label="Total orders"
+                value={report.totalOrders}
+                detail={<>Across all order channels</>}
+                icon={<ShoppingBag size={18} />}
+              />
+              <Metric
+                label="Active orders"
+                value={active.length}
+                detail={
+                  <>
+                    <em>{active.filter((o) => o.status === 'IN_KITCHEN').length} in kitchen</em> ·
+                    right now
+                  </>
+                }
+                icon={<ChefHat size={18} />}
+              />
+              <Metric
+                label="Average ticket"
+                value={money(report.averageTicketMinor)}
+                detail={<>Per completed order</>}
+                icon={<UtensilsCrossed size={18} />}
+              />
+            </div>
+            <div className="dashboard-grid">
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>A week of good business</h2>
+                    <p>Your completed order revenue, day by day</p>
+                  </div>
+                  <span className="demo-label">Last 7 days</span>
+                </div>
+                <RevenueChart report={report} />
+              </section>
+              <section className="panel channels-panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>How your guests order</h2>
+                    <p>A little bit of every kind of service</p>
+                  </div>
+                </div>
+                <ChannelChart report={report} />
+              </section>
+            </div>
+            <section className="panel recent-section">
+              <div className="panel-head">
+                <div>
+                  <h2>Fresh from your order book</h2>
+                  <p>The latest orders across your restaurant</p>
+                </div>
+                <Link className="text-link" href="/restaurant/orders">
+                  View all
+                  <ArrowRight size={16} />
+                </Link>
+              </div>
+              <div className="table-spacer" />
+              <OrderTable orders={(orders || []).slice(0, 5)} />
+            </section>
+            <div className="dashboard-grid section-gap">
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>The crowd favourites</h2>
+                    <p>Dishes your guests keep coming back for</p>
+                  </div>
+                  <Link className="text-link" href="/restaurant/menu">
+                    View menu
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+                <div className="panel-body">
+                  {report.popular.map((p, i) => (
+                    <div key={p.name} className="bill-line" style={{ alignItems: 'center' }}>
+                      <span className="store-avatar">{String(i + 1).padStart(2, '0')}</span>
+                      <div style={{ flex: 1 }}>
+                        <strong>{p.name}</strong>
+                        <small>{p.qty} sold this week</small>
+                      </div>
+                      <strong>{money(p.revenueMinor)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section className="panel">
+                <div className="panel-head">
+                  <h2>A little heads-up</h2>
+                  <span className="store-avatar">
+                    <Clock3 size={19} />
+                  </span>
+                </div>
+                <div className="panel-body">
+                  <div className="note-box">
+                    <strong>
+                      {report.lowStock
+                        ? `${report.lowStock} ingredients could use a top-up`
+                        : 'Your pantry is looking good'}
+                    </strong>
+                    <p>Keep your kitchen stocked and your service flowing.</p>
+                    <Link className="text-link section-gap" href="/restaurant/inventory">
+                      Check inventory
+                      <ArrowRight size={16} />
+                    </Link>
+                  </div>
+                  <div className="info-pair section-gap">
+                    <span>Average kitchen prep</span>
+                    <strong>
+                      {report.avgPrepMinutes ? `${report.avgPrepMinutes} min` : 'No prep data yet'}
+                    </strong>
+                  </div>
+                  <div className="info-pair">
+                    <span>Food cost</span>
+                    <strong>{report.foodCostPercent}%</strong>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </>
+        )
+      )}
+    </>
+  );
 }

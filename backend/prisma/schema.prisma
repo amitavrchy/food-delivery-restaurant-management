@@ -164,6 +164,7 @@ model CheckPayment {
   amountMinor Int
   method String
   seat Int?
+  lineId String?
   idempotencyKey String @unique
   createdAt DateTime @default(now())
   check TableCheck @relation(fields:[checkId],references:[id])
