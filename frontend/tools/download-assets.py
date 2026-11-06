@@ -3,7 +3,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from concurrent.futures import ThreadPoolExecutor
 import re
-root = Path(__file__).resolve().parents[1] / 'frontend' / 'public'
+root = Path(__file__).resolve().parents[1] / 'public'
 photos = {'burger':'1568901346375-23c9450c58cd','chicken':'1606755962773-d324e0a13086','bowl':'1512621776951-a57141f2eefd','pasta':'1473093295043-cdd812d0e601','salad':'1540420773420-3366772f4999','fries':'1573080496219-bb080dd4f877','matcha':'1515823064-d6e0c04616a7','drink':'1544145945-f90425340c7e','brownie':'1606313564200-e75d5e30476c'}
 def download(entry):
     name, photo = entry

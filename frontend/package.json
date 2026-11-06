@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "format": "prettier --write src tests *.ts",
+    "format:check": "prettier --check src tests *.ts"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -20,6 +23,9 @@
     "@types/leaflet": "^1.9.22",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2"
+    "@types/react-dom": "^19.2.2",
+    "typescript": "^5.9.3",
+    "@playwright/test": "^1.65.0",
+    "prettier": "^3.8.0"
   }
 }

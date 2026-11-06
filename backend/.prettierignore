@@ -1,10 +1,11 @@
 node_modules
+.cache
 .next
 dist
 package-lock.json
-frontend/public
-backend/prisma/migrations
+public
+prisma/migrations
 artifacts
 test-results
 playwright-report
-Project_spec.md
+tools/previous-workspace

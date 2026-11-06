@@ -22,7 +22,7 @@ export default defineConfig({
     process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1'
       ? undefined
       : {
-          command: 'npm run dev',
+          command: 'npm --prefix ../backend run dev:all',
           url: 'http://localhost:3000',
           reuseExistingServer: !process.env.CI,
           timeout: 120000,

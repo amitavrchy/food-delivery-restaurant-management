@@ -1,6 +1,11 @@
 import { existsSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { dirname,resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const backend=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const project=resolve(backend,'..');
+process.chdir(project);
 for (const directory of ['backend', 'frontend']) {
   const target = directory === 'backend' ? 'backend/.env' : 'frontend/.env.local';
   if (!existsSync(target)) {
@@ -14,15 +19,19 @@ for (const directory of ['backend', 'frontend']) {
       );
   }
 }
-function run(command, args) {
+function run(command, args,cwd=backend) {
   const result = spawnSync(command, args, {
+    cwd,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    windowsHide:true,
   });
   if (result.status !== 0) process.exit(result.status || 1);
 }
 run('docker', ['compose', 'up', '-d', '--wait', 'postgres', 'redis']);
-run('npm', ['run', 'db:generate']);
-run('npm', ['run', 'db:migrate']);
-run('npm', ['run', 'db:seed']);
-console.log('\nEverything is ready. Run npm run dev, then open http://localhost:3000.');
+const npm=process.env.npm_execpath;
+if(!npm)throw new Error('Start setup using npm run setup from backend.');
+run(process.execPath,[npm,'ci'],resolve(project,'frontend'));
+run(process.execPath,[npm,'run','db:generate']);
+run(process.execPath,[npm,'run','db:migrate']);
+run(process.execPath,[npm,'run','db:seed']);
+console.log('\nReady. From backend run npm run dev:all; open http://localhost:3000.');

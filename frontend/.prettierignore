@@ -1,0 +1,11 @@
+node_modules
+.cache
+.next
+dist
+package-lock.json
+public
+prisma/migrations
+artifacts
+test-results
+playwright-report
+tools/previous-workspace

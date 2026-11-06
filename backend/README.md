@@ -1,17 +1,18 @@
 # Tablelane
 
-A connected food delivery and restaurant operations application for Dhaka, built from [Project_spec.md](Project_spec.md). **Next.js + NestJS + Prisma + PostgreSQL/PostGIS + Redis/BullMQ + Socket.IO.**
+A connected food delivery and restaurant operations application for Dhaka, built from [Project_spec.md](docs/Project_spec.md). **Next.js + NestJS + Prisma + PostgreSQL/PostGIS + Redis/BullMQ + Socket.IO.**
 
 Customer ordering, kitchen service, restaurant management, table POS, rider dispatch and platform policies share one persistent backend. The responsive interface has self-hosted Plus Jakarta Sans, a **14px minimum** font size, keyboard-accessible dialogs and reduced-motion support. Money uses integer poisha; inventory uses database decimals.
 
 ## Run locally
 
-Install **Node.js 24**, start **Docker Desktop**, then run from the repository root:
+The repository contains exactly two application directories: `frontend/` and `backend/` (plus Git's own hidden `.git/` metadata). Each application has its own package manifest, lockfile, dependencies, configuration and tests. Install **Node.js 24**, start **Docker Desktop**, then run:
 
 ```sh
+cd backend
 npm ci
 npm run setup
-npm run dev
+npm run dev:all
 ```
 
 Open **http://localhost:3000**. API: `http://localhost:4000/api`; readiness: `/api/health`.
@@ -53,9 +54,7 @@ Offers expire after 30 seconds; dispatch expands its radius and retries after a 
 ## Verify
 
 ```sh
-npm run typecheck
-npm test
-npm run build
+npm run verify
 npm audit
 ```
 
@@ -63,11 +62,12 @@ With the seeded API running:
 
 ```sh
 npm run test:integration
+cd ../frontend
 npx playwright install chromium --no-shell
 npm run test:e2e
 ```
 
-Playwright can start the dev servers if needed. Browser tests cover checkout, all operations pages, 14px typography/mobile overflow, rider/admin entry, table-to-kitchen-to-settlement service, editors and attendance. Screenshots: ignored `artifacts/`; HTML report: ignored `playwright-report/`. Browser tests add demo activity; API tests remove their isolated fixtures. GitHub Actions runs these checks with PostGIS/Redis services.
+Playwright can start both dev servers if needed. Browser tests and their artifacts live under `frontend/`; API tests and infrastructure live under `backend/`. Browser tests add demo activity; API tests remove their isolated fixtures. Run `npm run verify` from backend to check both independent apps. A CI workflow example is retained under `backend/ci/`; GitHub cannot auto-discover workflows there. The two-folder constraint intentionally removes the root `.github/` directory.
 
 `npm run format` and `npm run format:check` enforce source formatting. Images/fonts are local assets, so normal page loads do not depend on CDNs.
 
