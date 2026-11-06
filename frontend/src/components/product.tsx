@@ -71,6 +71,18 @@ export function ProductModal({
         {item.description}
       </p>
       <div className="form-stack">
+        {!!item.dietaryTags?.length && (
+          <p className="note-box">
+            {item.dietaryTags.join(' · ')}
+            {item.energyKcal != null ? ` · ${item.energyKcal} kcal` : ''}
+          </p>
+        )}
+        {!!item.allergens?.length && (
+          <p className="note-box">
+            Contains: {item.allergens.join(', ')}. Contact the restaurant about allergies and cross
+            contamination before ordering.
+          </p>
+        )}
         {item.modifierGroups.map((g) => (
           <fieldset key={g.id}>
             <legend>

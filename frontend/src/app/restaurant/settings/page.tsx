@@ -6,6 +6,7 @@ import { ErrorState, Loading, PageHeading } from '@/components/ui';
 import { useAction, useResource } from '@/lib/hooks';
 import { patch } from '@/lib/api';
 import type { Restaurant } from '@/lib/types';
+import { OpeningHours } from '@/components/opening-hours';
 export default function SettingsPage() {
   const { user, restaurantId } = useApp();
   const {
@@ -82,7 +83,90 @@ export default function SettingsPage() {
                 </button>
               </div>
             </form>
+            <form
+              key={r.id}
+              className="panel panel-body section-gap"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                await run(
+                  () =>
+                    patch(`restaurants/${r.id}`, {
+                      taxBps: Math.round(Number(f.get('tax')) * 100),
+                      serviceBps: Math.round(Number(f.get('service')) * 100),
+                      minimumOrderMinor: undefined,
+                      minOrderMinor: Math.round(Number(f.get('minimum')) * 100),
+                      deliveryRadiusKm: Number(f.get('radius')),
+                      loyaltyEnabled: f.get('loyalty') === 'on',
+                    }),
+                  'Ordering policies saved.',
+                );
+              }}
+            >
+              <h2>Ordering policies</h2>
+              <p className="form-hint">
+                Changes apply to new orders. Existing order totals stay recorded at checkout.
+              </p>
+              <div className="form-grid section-gap">
+                <label>
+                  VAT (%)
+                  <input
+                    name="tax"
+                    type="number"
+                    min="0"
+                    max="30"
+                    step=".01"
+                    defaultValue={(r.taxBps ?? 500) / 100}
+                    required
+                  />
+                </label>
+                <label>
+                  Dine in service charge (%)
+                  <input
+                    name="service"
+                    type="number"
+                    min="0"
+                    max="30"
+                    step=".01"
+                    defaultValue={(r.serviceBps ?? 500) / 100}
+                    required
+                  />
+                </label>
+                <label>
+                  Minimum food order (BDT)
+                  <input
+                    name="minimum"
+                    type="number"
+                    min="0"
+                    max="1000000"
+                    step=".01"
+                    defaultValue={(r.minOrderMinor ?? 0) / 100}
+                    required
+                  />
+                </label>
+                <label>
+                  Delivery radius (km)
+                  <input
+                    name="radius"
+                    type="number"
+                    min="1"
+                    max="100"
+                    step=".1"
+                    defaultValue={r.deliveryRadiusKm ?? 15}
+                    required
+                  />
+                </label>
+                <label className="check-row">
+                  <input name="loyalty" type="checkbox" defaultChecked={r.loyaltyEnabled ?? true} />
+                  Enable loyalty earn and redemption
+                </label>
+              </div>
+              <button className="btn primary section-gap" disabled={busy}>
+                Save ordering policies
+              </button>
+            </form>
             <section className="panel panel-body section-gap">
+              <OpeningHours restaurant={r} />
               <h2>Find your service rhythm</h2>
               <div className="settings-row">
                 <div>

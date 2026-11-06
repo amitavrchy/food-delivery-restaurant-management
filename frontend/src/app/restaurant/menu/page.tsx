@@ -144,6 +144,9 @@ function MenuEditor({
     [prep, setPrep] = useState(item?.prepMinutes || 15),
     [from, setFrom] = useState(item?.availableFrom || 0),
     [until, setUntil] = useState(item?.availableUntil || 24),
+    [tags, setTags] = useState(item?.dietaryTags?.join(', ') || ''),
+    [allergens, setAllergens] = useState(item?.allergens?.join(', ') || ''),
+    [energy, setEnergy] = useState(item?.energyKcal?.toString() || ''),
     [confirmArchive, setConfirmArchive] = useState(false);
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -157,6 +160,15 @@ function MenuEditor({
       prepMinutes: prep,
       availableFrom: from,
       availableUntil: until,
+      dietaryTags: tags
+        .split(',')
+        .map((s) => s.trim().toUpperCase().replaceAll(' ', '_'))
+        .filter(Boolean),
+      allergens: allergens
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      energyKcal: energy ? Number(energy) : null,
     };
     const result = await run(
       () => (item ? patch(`menu/${item.id}`, data) : post(`restaurants/${menu.id}/menu`, data)),
@@ -273,6 +285,34 @@ function MenuEditor({
             ))}
           </select>
         </label>
+        <label>
+          Dietary tags (comma separated)
+          <input
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder="Vegetarian, Vegan"
+            maxLength={300}
+          />
+        </label>
+        <label>
+          Allergens (comma separated)
+          <input
+            value={allergens}
+            onChange={(e) => setAllergens(e.target.value)}
+            placeholder="Milk, Gluten, Nuts"
+            maxLength={300}
+          />
+        </label>
+        <label>
+          Energy per serving (kcal)
+          <input
+            type="number"
+            min="0"
+            max="10000"
+            value={energy}
+            onChange={(e) => setEnergy(e.target.value)}
+          />
+        </label>
         <p className="form-hint">Availability uses the restaurant’s Dhaka timezone.</p>
         <div className="form-actions">
           {item && (
@@ -364,7 +404,7 @@ function RecipeEditor({ item, onClose }: { item: MenuItem; onClose: () => void }
               type="number"
               min={0.001}
               step=".001"
-              max={10000}
+              max={5000}
               aria-label={`Quantity ${i + 1}`}
               value={r.qty}
               onChange={(e) =>

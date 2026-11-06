@@ -3,20 +3,26 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Clock3, MapPin, Search, Truck } from 'lucide-react';
 import { CustomerShell } from '@/components/shell';
-import { useResource } from '@/lib/hooks';
+import { useResource, useAction } from '@/lib/hooks';
 import { Empty, ErrorState, Loading, Modal } from '@/components/ui';
 import { CartSummary, FoodCard, ProductModal } from '@/components/product';
 import { useApp } from '@/components/provider';
-import { money } from '@/lib/api';
+import { money, api, post } from '@/lib/api';
 import type { CartLine, MenuItem, Restaurant } from '@/lib/types';
 export default function RestaurantMenu({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data, error, loading } = useResource<Restaurant>(`restaurants/${id}/menu`);
   const [category, setCategory] = useState('all'),
+    [diet, setDiet] = useState('all'),
     [query, setQuery] = useState(''),
     [product, setProduct] = useState<MenuItem | null>(null),
     [replace, setReplace] = useState<CartLine | null>(null);
-  const { cart, setCart, notify } = useApp();
+  const { cart, setCart, notify, user } = useApp();
+  const { data: favorites } = useResource<{ restaurantId: string }[]>(
+    user ? 'account/favorites' : null,
+  );
+  const saved = favorites?.some((f) => f.restaurantId === id);
+  const { run, busy } = useAction();
   function add(line: CartLine) {
     if (cart.length && cart[0].item.restaurantId !== id) {
       setReplace(line);
@@ -44,6 +50,26 @@ export default function RestaurantMenu({ params }: { params: Promise<{ id: strin
                 <div className="eyebrow">{data.cuisine}</div>
                 <h1>{data.name}</h1>
                 <p>{data.description}</p>
+                <div className="inline-fields section-gap">
+                  <button
+                    className="btn secondary"
+                    disabled={busy || !user}
+                    onClick={() =>
+                      void run(
+                        () =>
+                          saved
+                            ? api(`account/favorites/${id}`, { method: 'DELETE' })
+                            : post(`account/favorites/${id}`),
+                        saved ? 'Restaurant removed from favorites.' : 'Restaurant saved.',
+                      )
+                    }
+                  >
+                    {saved ? 'Saved to favorites' : 'Save restaurant'}
+                  </button>
+                  <Link className="btn soft" href="/account?tab=reservations">
+                    Reserve a table
+                  </Link>
+                </div>
                 <div className="restaurant-meta">
                   <span>
                     <Clock3 size={16} />
@@ -90,11 +116,23 @@ export default function RestaurantMenu({ params }: { params: Promise<{ id: strin
                   </div>
                 </div>
                 <div className="menu-grid">
+                  <label className="form-full">
+                    Dietary preference
+                    <select value={diet} onChange={(e) => setDiet(e.target.value)}>
+                      <option value="all">All dishes</option>
+                      {Array.from(new Set(data.items?.flatMap((i) => i.dietaryTags || []))).map(
+                        (tag) => (
+                          <option key={tag}>{tag}</option>
+                        ),
+                      )}
+                    </select>
+                  </label>
                   {data.items
                     ?.filter(
                       (i) =>
                         (category === 'all' || i.categoryId === category) &&
-                        i.name.toLowerCase().includes(query.toLowerCase()),
+                        i.name.toLowerCase().includes(query.toLowerCase()) &&
+                        (diet === 'all' || !!i.dietaryTags?.includes(diet)),
                     )
                     .map((item) => (
                       <FoodCard key={item.id} item={item} onAdd={() => setProduct(item)} />
@@ -103,7 +141,8 @@ export default function RestaurantMenu({ params }: { params: Promise<{ id: strin
                 {!data.items?.filter(
                   (i) =>
                     (category === 'all' || i.categoryId === category) &&
-                    i.name.toLowerCase().includes(query.toLowerCase()),
+                    i.name.toLowerCase().includes(query.toLowerCase()) &&
+                    (diet === 'all' || !!i.dietaryTags?.includes(diet)),
                 ).length && (
                   <Empty title="No dishes found">Try a different search or category.</Empty>
                 )}
